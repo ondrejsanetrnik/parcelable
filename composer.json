@@ -1,0 +1,20 @@
+{
+    "name": "ondrejsanetrnik/parcelable",
+    "description": "Provides additional methods for posting parcels",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Ondrej Sanetrnik"
+        }
+    ],
+    "minimum-stability": "dev",
+    "require": {
+        "ondrejsanetrnik/helper": "dev-master"
+    },
+    "autoload": {
+        "psr-4": {
+            "Ondrejsanetrnik\\Parcelable\\": "src/"
+        }
+    }
+}
