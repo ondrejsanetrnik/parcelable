@@ -10,7 +10,8 @@
     ],
     "minimum-stability": "dev",
     "require": {
-        "ondrejsanetrnik/helper": "dev-master"
+        "ondrejsanetrnik/helper": "dev-master",
+        "ondrejsanetrnik/core": "dev-master"
     },
     "autoload": {
         "psr-4": {

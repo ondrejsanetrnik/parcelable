@@ -8,9 +8,15 @@ use Ondrejsanetrnik\Core\CoreResponse;
 use SoapClient;
 use SoapFault;
 
+/**
+ * @method static packetStatus(int $parcelNumber)
+ * @method static createPacketClaimWithPassword(array $array)
+ * @method static packetLabelPdf($id, string $string, int $int)
+ * @method static createPacket(array $array)
+ */
 class Packeta
 {
-    const STATUS_MAP = [
+    public const STATUS_MAP = [
         'received data'          => 'Čeká na vyzvednutí kurýrem',
         'arrived'                => 'Přijata k přepravě',
         'reverse packet arrived' => 'Přijata k přepravě',
@@ -28,8 +34,8 @@ class Packeta
 
     public static function __callStatic(string $method, array $parameters): CoreResponse
     {
-        $response = new CoreResponse;
-        $client = new SoapClient("http://www.zasilkovna.cz/api/soap-php-bugfix.wsdl");
+        $response = new CoreResponse();
+        $client = new SoapClient('http://www.zasilkovna.cz/api/soap-php-bugfix.wsdl');
 
         try {
             return $response->success($client->$method(
@@ -87,38 +93,49 @@ class Packeta
         foreach (range(1, $parcelCount) as $i) {
             switch ($type) {
                 case 'parcel':
-                    if ($entity->hasMismatchedCurrency) {
-                        $currency = $entity->country == 'CZ' ? 'CZK' : 'EUR';
-                        $codInWrongCurrency = $entity->codInCurrency / $parcelCount;
-                        $totalInWrongCurrency = $entity->totalInCurrency;
-                        $cod = $entity->currency == 'CZK' ? czkToEur($codInWrongCurrency) : eurToCzk($codInWrongCurrency);
-                        $total = $entity->currency == 'CZK' ? czkToEur($totalInWrongCurrency) : eurToCzk($totalInWrongCurrency);
-                    }
+//                    if ($entity->has_mismatched_currency) {
+//                        $currency = $entity->country == 'CZ' ? 'CZK' : 'EUR';
+//                        $codInWrongCurrency = $entity->cod_in_currency / $parcelCount;
+//                        $totalInWrongCurrency = $entity->total_in_currency;
+//                        $cod = $entity->currency == 'CZK' ? czkToEur($codInWrongCurrency) : eurToCzk($codInWrongCurrency);
+//                        $total = $entity->currency == 'CZK' ? czkToEur($totalInWrongCurrency) : eurToCzk($totalInWrongCurrency);
+//                    }
 
                     # Post a parcel
                     $response = self::createPacket([
-                        'number'      => $entity->id,
-                        'name'        => $entity->firstName,
-                        'surname'     => $entity->lastName,
-                        'email'       => $entity->email,
-                        'phone'       => $entity->phone,
-                        'street'      => $entity->street,
-                        'houseNumber' => $entity->houseNumber,
-                        'city'        => $entity->city,
-                        'zip'         => substr_replace($entity->postal_code ?? '', ' ', 3, 0),
-                        'addressId'   => $entity->is_zasilkovna_on_address ? $entity->adressId ?? 106 : $entity->packetaId,
-                        'currency'    => $currency ?? $entity->currency,
-                        'cod'         => round($cod ?? ($entity->codInCurrency / $parcelCount), ($currency ?? $entity->currency) == 'CZK' ? 0 : 2),
-                        'value'       => $total ?? $entity->totalInCurrency ?: 100,
-                        'weight'      => min(10, $entity->weight / 0.5 ?: 1),
-                        'eshop'       => $entity->eshop,
+                        'number'             => $entity->id,
+                        'name'               => $entity->first_name,
+                        'surname'            => $entity->last_name,
+                        'email'              => $entity->email,
+                        'phone'              => $entity->phone,
+                        'street'             => $entity->street,
+                        'houseNumber'        => $entity->houseNumber,
+                        'city'               => $entity->city,
+                        'zip'                => substr_replace($entity->postal_code ?? '', ' ', 3, 0),
+                        'addressId'          => $entity->address_id,
+                        'carrierPickupPoint' => $entity->carrier_pickup_point,
+                        'currency'           => $entity->national_currency,
+                        'size'               => $entity->size_for_external_carrier,
+                        'cod'                => $entity
+                            ->cod_object
+                            ->divide($parcelCount)
+                            ->convertTo($entity->national_currency)
+                            ->roundByCurrency()
+                            ->float,
+                        'value'              =>
+                            min(price(19990)->convertTo($entity->national_currency)->float, $entity
+                                ->total_object
+                                ->convertTo($entity->national_currency)
+                                ->roundByCurrency()
+                                ->float ?: 100),
+                        'weight'             => min(10, $entity->weight / 0.5 ?: 1),
+                        'eshop'              => $entity->eshop,
                     ]);
 
                     if ($response->success) {
                         # Get and save the label
                         $protoParcel = $response->data;
-                        $_response = self::packetLabelPdf($protoParcel->id, "A7 on A7", 0);
-                        Storage::disk('private')->put('labels/' . $protoParcel->id . '.pdf', $_response->data);
+                        self::getLabel($protoParcel->id);
                         $protoParcels[] = $protoParcel;
                     }
                     break;
@@ -129,7 +146,7 @@ class Packeta
                         'number'         => $entity->model_identifier,
                         'email'          => $entity->email,
                         'phone'          => $entity->phone,
-                        'value'          => $entity->price ?: 100,
+                        'value'          => $entity->total_object->float ?: 100,
                         'currency'       => $entity->currency,
                         'eshop'          => $entity->eshop,
                         'consignCountry' => 'CZ',
@@ -144,7 +161,7 @@ class Packeta
                     break;
 
                 default:
-                    $response = new CoreResponse;
+                    $response = new CoreResponse();
                     $response->fail('Unknown type of entity for parcel creation');
                     break;
             }
@@ -154,5 +171,11 @@ class Packeta
         $response->setData($protoParcels);
 
         return $response;
+    }
+
+    public static function getLabel(int $id): void
+    {
+        $response = self::packetLabelPdf($id, 'A6 on A6', 0);
+        Storage::disk('private')->put('labels/' . $id . '.pdf', $response->data);
     }
 }

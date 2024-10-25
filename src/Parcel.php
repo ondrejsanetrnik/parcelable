@@ -5,6 +5,7 @@ namespace Ondrejsanetrnik\Parcelable;
 use App\Models\Entity;
 use EloquentFilter\Filterable;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Storage;
 use Ondrejsanetrnik\Core\CoreResponse;
 
@@ -13,6 +14,8 @@ class Parcel extends Entity
     use Filterable;
 
     public const URL_PREFIX = 'balicek';
+
+    public array $localiseable = ['status'];
 
     public const TABLEABLED = [
         'id',
@@ -72,9 +75,15 @@ class Parcel extends Entity
 
     public function getTrackingUrlAttribute(): string
     {
+        $language = $this->parcelable?->language ?? App::getLocale();
+
         return match ($this->carrier) {
-            'GLS' => 'https://gls-group.eu/CZ/cs/sledovani-zasilek?match=' . $this->tracking_number,
-            default => 'https://tracking.packeta.com/cs/?id=' . $this->tracking_number,
+            'GLS' => match ($language) {
+                    'cs' => 'https://gls-group.eu/CZ/cs/sledovani-zasilek',
+                    'de' => 'https://www.gls-pakete.de/sendungsverfolgung',
+                    default => 'https://gls-group.eu/CZ/en/parcel-tracking',
+                } . '?match=' . $this->tracking_number,
+            default => 'https://tracking.packeta.com/' . $language . '/?id=' . $this->tracking_number,
         };
     }
 
@@ -83,12 +92,12 @@ class Parcel extends Entity
         return route('label', $this->id);
     }
 
-    public function getCarrierClassAttribute()
+    public function getCarrierClassAttribute(): string
     {
         return self::CARRIER_CLASS[$this->carrier];
     }
 
-    public function getLabelPathAttribute()
+    public function getLabelPathAttribute(): string
     {
         return Storage::disk('private')->path('labels/' . $this->tracking_number . '.pdf');
     }
@@ -118,7 +127,7 @@ class Parcel extends Entity
                     'tracking_number' => $protoParcel->id,
                     'carrier'         => $entity->carrierName,
                     'name'            => $entity->name,
-                    'cod'             => ceil($entity->codInCurrency / ($entity->parcel_count ?: 1)),
+                    'cod'             => ceil($entity->cod_in_currency / ($entity->parcel_count ?: 1)),
                     'password'        => $protoParcel->password ?? null,
                     'type'            => $type,
                     'status'          => 'Čeká na vyzvednutí kurýrem',

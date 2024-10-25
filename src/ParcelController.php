@@ -41,10 +41,11 @@ class ParcelController extends Controller
         $parcel = Parcel::findOrFail($id);
 
         if (!Storage::disk('private')->exists('labels/' . $parcel->tracking_number . '.pdf')) {
-            if ($parcel->carrier == 'Zásilkovna') {
-                $_response = Packeta::packetLabelPdf($parcel->tracking_number, "A7 on A7", 0);
-                Storage::disk('private')->put('labels/' . $parcel->tracking_number . '.pdf', $_response->data);
-            } else {
+            if ($parcel->carrier == 'Zásilkovna')
+                Packeta::getLabel($parcel->tracking_number);
+//            elseif ($parcel->carrier == 'GLS')
+//                Gls::printLabels(Gls::generateJson($par));
+            else {
                 return redirect()->back()->with('error', 'Soubor nenalezen');
             }
         }

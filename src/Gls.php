@@ -111,10 +111,10 @@ class Gls //ROZPRAS
     }
 
     #GLS INHERITED FUNCTION
-    public static function printLabels($username, $password, $url, $method, $parcelsJson): CoreResponse
+    public static function printLabels($parcelsJson): CoreResponse
     {
-        $request = '{"Username":"' . $username . '","Password":' . $password . ',"ParcelList":' . $parcelsJson . '}';
-        $response = self::getResponse($url, $method, $request);
+        $request = '{"Username":"' . config('parcelable.GLS_USERNAME') . '","Password":' . self::hashPassword() . ',"ParcelList":' . $parcelsJson . '}';
+        $response = self::getResponse(self::URL, 'PrintLabels', $request);
 
         if ($response->success) {
             $pdf = implode(array_map('chr', $response->data->Labels));
@@ -136,6 +136,16 @@ class Gls //ROZPRAS
         return $response;
     }
 
+    public static function getPrintedLabels(array $ids)
+    {
+        $request = '{"Username":"' . config('parcelable.GLS_USERNAME') . '","Password":' . self::hashPassword() . ',"ParcelIdList":' . json_encode($ids) . ',"PrintPosition":1,"ShowPrintDialog":0}';
+        $response = self::getResponse(self::URL, 'GetPrintedLabels', $request);
+
+
+        //MAYDO WTF their API doesnt hanlde their own parcel IDs? {"GetPrintedLabelsErrorList":[{"ErrorCode":"1000","ErrorDescription":"There was an error deserializing the object of type GLS.MyGLS.ServiceData.APIDTOs.LabelOperations.GetPrintedLabelsRequest. The value '5007047633' cannot be parsed as the type 'Int32'."}]}
+        dd($response);
+    }
+
     /**
      * Generates the JSON string from a given resource
      *
@@ -145,7 +155,7 @@ class Gls //ROZPRAS
      */
     public static function generateJson(
         Entity $entity,
-        string $type,
+        string $type = '',
     ): string
     {
         $type = $type ?: $entity->defaultParcelType;
@@ -155,60 +165,63 @@ class Gls //ROZPRAS
         if ($entity->payment == 'Dobírka') $cod = str_replace(',', '.', $entity->dueInCurrencyAndCountry);
 
         $isClaim = $type == 'claim';
-        //MAYDO ROZPRAS do array a json_encode
-        $parcelsJson = '[{
-            "ClientNumber": "' . $config['id'] . '",
-            "ClientReference": "' . $entity->id . '",
-            "CODAmount": "' . ($cod ?? 0) . '",
-            "CODReference": "' . $entity->id . '",
-            "Content": "' . $entity->id . ' ' . $entity->name . ' ' . $entity->phone . '",
-            "Count": ' . ($entity->parcel_count ?: '1') . ',
-            "' . ($isClaim ? 'PickupAddress' : 'DeliveryAddress') . '": {
-              "City": "' . ($entity->parcelshopCity ?? $entity->city) . '",
-              "ContactEmail": "' . $entity->email . '",
-              "ContactName": "' . $entity->name . '",
-              "ContactPhone": "' . $entity->phone . '",
-              "CountryIsoCode": "' . $entity->country . '",
-              "HouseNumber": "",
-              "Name": "' . ($entity->glsPacket ?? $entity->name) . '",
-              "Street": "' . ($entity->parcelshopStreet ?? $entity->street) . '",
-              "ZipCode": "' . ($entity->parcelshopZip ?? $entity->postal_code) . '",
-              "HouseNumberInfo": ""
-            },
-            "' . ($isClaim ? 'DeliveryAddress' : 'PickupAddress') . '": {
-              "City": "Liberec",
-              "ContactEmail": "' . $config['email'] . '",
-              "ContactName": "' . $config['contactName'] . '",
-              "ContactPhone": "' . config('parcelable.GLS_PHONE') . '",
-              "CountryIsoCode": "CZ",
-              "HouseNumber": "' . config('parcelable.GLS_HOUSE_NUMBER') . '",
-              "Name": "' . $config['name'] . '",
-              "Street": "' . config('parcelable.GLS_STREET') . '",
-              "ZipCode": "46001",
-              "HouseNumberInfo": "' . config('parcelable.GLS_SENDER_INFO') . '"
-            },
-            "PickupDate": "\/Date(' . ($entity->pickupTimestamp ?? now()->timestamp) . ')\/",
-            "ServiceList":[' .
-            (!$entity->glsPacketa ? '
-                {
-                  "Code":"FDS",
-                  "FDSParameter":{
-                      "Value":"' . ($isClaim ? $config['email'] : $entity->email) . '"
-                  }
-                }' : '') .
-            ($isClaim ? ',{"Code":"PSS"}' : '') .
-            ($entity->glsPacketa ? '
-                {
-                "Code":"PSD",
-                "PSDParameter":{
-                    "StringValue":"' . $entity->glsPacketa . '"
-                }
-                }' : '') . '
-            ]
-          }]';
 
+        $serviceList = [];
 
-        return $parcelsJson;
+        if ($entity->gls_packeta) {
+            $serviceList[] = [
+                'Code'         => 'PSD',
+                'PSDParameter' => [
+                    'StringValue' => $entity->gls_packeta,
+                ],
+            ];
+        } elseif ($entity->fds_available) {
+            $serviceList[] = [
+                'Code'         => 'FDS',
+                'FDSParameter' => [
+                    'Value' => $isClaim ? $config['email'] : $entity->email,
+                ],
+            ];
+        }
+
+        if ($isClaim) $serviceList[] = ['Code' => 'PSS'];
+
+        $parcelArray = [
+            'ClientNumber'                                 => $config['id'],
+            'ClientReference'                              => $entity->id,
+            'CODAmount'                                    => $cod ?? 0,
+            'CODReference'                                 => $entity->id,
+            'Content'                                      => $entity->id . ' ' . $entity->name . ' ' . $entity->phone,
+            'Count'                                        => $entity->parcel_count ?: 1,
+            $isClaim ? 'PickupAddress' : 'DeliveryAddress' => [
+                'City'            => $entity->parcelshop_city ?? $entity->city,
+                'ContactEmail'    => $entity->email,
+                'ContactName'     => $entity->name,
+                'ContactPhone'    => $entity->phone,
+                'CountryIsoCode'  => $entity->country,
+                'HouseNumber'     => '',
+                'Name'            => $entity->gls_packet ?? $entity->name,
+                'Street'          => $entity->parcelshop_street ?? $entity->street,
+                'ZipCode'         => $entity->parcelshop_zip ?? $entity->postal_code,
+                'HouseNumberInfo' => '',
+            ],
+            $isClaim ? 'DeliveryAddress' : 'PickupAddress' => [
+                'City'            => 'Liberec',
+                'ContactEmail'    => $config['email'],
+                'ContactName'     => $config['contactName'],
+                'ContactPhone'    => config('parcelable.GLS_PHONE'),
+                'CountryIsoCode'  => 'CZ',
+                'HouseNumber'     => config('parcelable.GLS_HOUSE_NUMBER'),
+                'Name'            => $config['name'],
+                'Street'          => config('parcelable.GLS_STREET'),
+                'ZipCode'         => '46001',
+                'HouseNumberInfo' => config('parcelable.GLS_SENDER_INFO'),
+            ],
+            'PickupDate'                                   => '/Date(' . ($entity->pickup_timestamp ?? now()->timestamp) . ')/',
+            'ServiceList'                                  => $serviceList,
+        ];
+
+        return json_encode([$parcelArray], JSON_UNESCAPED_UNICODE);
     }
 
 
@@ -228,7 +241,7 @@ class Gls //ROZPRAS
         $json = self::generateJson($entity, $type);
 
         # Print Labels function also saves the label to the folder
-        $response = self::printLabels(config('parcelable.GLS_USERNAME'), self::hashPassword(), self::URL, 'PrintLabels', $json);
+        $response = self::printLabels($json);
 
         if ($response->success) {
             # Everything allright
