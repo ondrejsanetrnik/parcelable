@@ -2,7 +2,7 @@
 
 namespace Ondrejsanetrnik\Parcelable;
 
-use App\Entity;
+use App\Models\Entity;
 use EloquentFilter\Filterable;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Facades\Storage;

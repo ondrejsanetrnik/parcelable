@@ -2,16 +2,11 @@
 
 namespace Ondrejsanetrnik\Parcelable;
 
-use App\Entity;
-use Exception;
-use GuzzleHttp\Client;
-use GuzzleHttp\Psr7\Request;
-use Illuminate\Support\Facades\Log;
+use App\Models\Entity;
 use Illuminate\Support\Facades\Storage;
 use Ondrejsanetrnik\Core\CoreResponse;
 use SoapClient;
 use SoapFault;
-use Spatie\ArrayToXml\ArrayToXml;
 
 class Packeta
 {

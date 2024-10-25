@@ -2,12 +2,9 @@
 
 namespace Ondrejsanetrnik\Parcelable;
 
-use App\Entity;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Log;
+use App\Models\Entity;
 use Illuminate\Support\Facades\Storage;
 use Ondrejsanetrnik\Core\CoreResponse;
-use stdClass;
 
 class Gls //ROZPRAS
 {
