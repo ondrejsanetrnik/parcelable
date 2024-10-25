@@ -115,6 +115,8 @@ class Parcel extends Entity
         string $type = ''
     ): CoreResponse
     {
+        //$order má is_zasilkovna_on_address set to true, delivery ji zůstává 'Zásilkovna'
+        //přepínat a upravovat to jde  😁
         $type = $type ?: $entity->defaultParcelType;
         $response = $entity->carrierClass::createFrom($entity, $type);
         if ($response->success) {
