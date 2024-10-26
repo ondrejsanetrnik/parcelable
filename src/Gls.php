@@ -6,7 +6,7 @@ use App\Models\Entity;
 use Illuminate\Support\Facades\Storage;
 use Ondrejsanetrnik\Core\CoreResponse;
 
-class Gls //ROZPRAS
+class Gls
 {
     public const STATUS_MAP = [
         'Doručeno'                       => 'Doručena',
@@ -158,7 +158,7 @@ class Gls //ROZPRAS
         string $type = '',
     ): string
     {
-        $type = $type ?: $entity->defaultParcelType;
+        $type = $type ?: $entity->default_parcel_type;
 
         $config = config('parcelable.GLS_CLIENTS')[$entity->eshop];
 

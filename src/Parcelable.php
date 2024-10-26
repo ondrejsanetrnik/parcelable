@@ -2,14 +2,20 @@
 
 namespace Ondrejsanetrnik\Parcelable;
 
-use App\Models\Event;
+use Exception;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Ondrejsanetrnik\Core\CoreResponse;
 
 trait Parcelable
 {
-    public string $defaultParcelType = 'parcel';
+    /**
+     * @throws Exception
+     */
+    public function __construct()
+    {
+        if (!$this instanceof ParcelableContract) throw new Exception("Classes using Parcelable must implement ParcelableContract.");
+    }
 
     public function parcels(): MorphMany
     {
@@ -29,7 +35,7 @@ trait Parcelable
      */
     public function createParcel(string $type = ''): CoreResponse
     {
-        $type = $type ?: $this->defaultParcelType;
+        $type = $type ?: $this->default_parcel_type;
         $response = Parcel::createFrom($this, $type);
 
         if ($response->success) {
@@ -172,8 +178,7 @@ trait Parcelable
      */
     public function getSizeForExternalCarrierAttribute(): ?array
     {
-//        if ($this->is_external_pickup_point) {
-        $itemCount = $this->items->count();
+        $itemCount = $this->items?->count();
         return match ($this->biggest_format) {
             'BIG' => [
                 'length' => 400,
@@ -192,7 +197,6 @@ trait Parcelable
             ],
             default => null,
         };
-//        } else return null;
     }
 
     public function getFdsAvailableAttribute(): bool
@@ -216,5 +220,15 @@ trait Parcelable
             'GR',
             'PT',
         ]);
+    }
+
+    public function getDefaultParcelTypeAttribute(): string
+    {
+        return 'parcel';
+    }
+
+    public function getParcelCountAttribute(): int
+    {
+        return $this->getRawOriginal('parcel_count') ?? 1;
     }
 }
