@@ -3,6 +3,7 @@
 namespace Ondrejsanetrnik\Parcelable;
 
 use App\Models\Entity;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Ondrejsanetrnik\Core\CoreResponse;
 
@@ -16,7 +17,6 @@ class Gls
         'P&S/P&R na vyzvednutí'          => 'Čeká na vyzvednutí kurýrem',
         'P&S/P&R vytisknut'              => 'Čeká na vyzvednutí kurýrem',
         'Není balík P&S/P&R'             => 'Čeká na vyzvednutí kurýrem',
-        'P&S/P&R vymazán'                => 'Čeká na vyzvednutí kurýrem',
         'Balík není připraven'           => 'Čeká na vyzvednutí kurýrem',
         'Vyzvednuto'                     => 'Přijata k přepravě',
         'Registrace'                     => 'V přepravě',
@@ -50,9 +50,9 @@ class Gls
         'Odmítnutí převzetí balíku'      => 'Na cestě zpátky',
         'ParcelShop return'              => 'Na cestě zpátky',
         'Odmítnutí (neobjednaná služba)' => 'Na cestě zpátky',
+        'P&S/P&R vymazán'                => 'Stornována',
 
-        'returned'  => 'Vrácena obchodu',
-        'cancelled' => 'Stornována',
+        'returned' => 'Vrácena obchodu',
     ];
 
     public const URL = 'https://api.mygls.cz/ParcelService.svc/json/';
@@ -285,15 +285,26 @@ class Gls
         $response = self::getResponse(self::URL, 'GetParcelStatuses', $request);
 
         if ($response->success) {
-            foreach ($response->data->ParcelStatusList as $statusObject) {
+
+            $statuses = collect($response->data->ParcelStatusList);
+
+            foreach ($statuses as $statusObject) {
                 if (!array_key_exists($statusObject->StatusDescription, self::STATUS_MAP))
-                    dump($statusObject);
+                    Log::warning('GLS status not recognized: ' . $statusObject->StatusDescription);
             }
 
-            $status = self::STATUS_MAP[$response->data->ParcelStatusList[0]?->StatusDescription] ?? 'V přepravě';
+            $currentStatusDescription = $statuses[0]?->StatusDescription;
+            $statusMap = self::STATUS_MAP;
+
+            if ($statuses->where('StatusDescription', 'P&S/P&R na vyzvednutí')->count()) {
+                # The parcel is a return, adresát nezastižen - oznámení means the parcel was still not yet picked up
+                $statusMap['adresát nezastižen - oznámení'] = 'Čeká na vyzvednutí kurýrem';
+            }
+
+            $status = $statusMap[$currentStatusDescription] ?? 'V přepravě';
 
             if (
-                collect($response->data->ParcelStatusList)->where('StatusDescription', 'Zpětné zaslání odesílateli')->count() &&
+                $statuses->where('StatusDescription', 'Zpětné zaslání odesílateli')->count() &&
                 $status == 'Doručena'
             ) {
                 # The parcel was refused and is on its way back, the delivered now means returned to sender -.-
