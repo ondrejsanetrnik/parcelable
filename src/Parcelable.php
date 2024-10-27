@@ -12,9 +12,11 @@ trait Parcelable
     /**
      * @throws Exception
      */
-    public function __construct()
+    public function __construct(...$args)
     {
-        if (!$this instanceof ParcelableContract) throw new Exception("Classes using Parcelable must implement ParcelableContract.");
+        if (!$this instanceof ParcelableContract) throw new Exception('Classes using Parcelable must implement ParcelableContract.');
+
+        parent::__construct(...$args);
     }
 
     public function parcels(): MorphMany
