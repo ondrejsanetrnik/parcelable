@@ -193,12 +193,12 @@ class Balikovna
         } else {
             // Handle single parcel or Balikovna on address
             if ($entity->parcel_count > 1 && $entity->is_balikovna_on_address == 1) {
+
                 $data = self::addParcelToJson($data, $entity);
             }
 
             // Send the request and get the response
             $response = self::getResponse('parcelService', json_decode($data));
-
             // Check if the response is successful and contains the label file
             if ($response->success && isset($response->data->responseHeader->responsePrintParams->file)) {
                 // Get the base64 encoded label
@@ -215,6 +215,7 @@ class Balikovna
                 return $response->success([$protoParcel]);
 
             }
+
             $response->fail(collect($response->data->responseHeader?->resultParcelData[0]?->parcelStateResponse)->implode('responseText', ', '));
 
             return $response;
@@ -276,7 +277,7 @@ class Balikovna
 
         // Prepare parcelParams
         $parcelParams = [
-            'weight'           => strval(min($entity->width / 20, 49)), //asi bych nastavil max limit
+            'weight'           => strval(round(min($entity->width / 20, 49), 3)), //asi bych nastavil max limit
             'prefixParcelCode' => $entity->is_balikovna_on_address == 1 ? 'DR' : 'NB', // Prefix for parcel code
             'recordID'         => strval($entity->id), // internal ID
             'insuredValue'     => $entity->total * 2, // insurance, double the price of goods
@@ -386,55 +387,54 @@ class Balikovna
         // Decode the original JSON into an associative array for manipulation
         $data = json_decode($json, true);
 
-        // Check if the JSON structure already contains multipart parcel data
-        $isNewMultipart = !isset($data['multipartParcelData']);
+        // Calculate the total number of parcels from entity
+        $totalParcels = $entity->parcel_count;
 
-        // Determine how many existing parcels there are
-        // If this is a new multipart, start with 0, else count existing multipart parcels
-        $existingParcelCount = $isNewMultipart ? 1 : count($data['multipartParcelData']);
-
-        // Increment the parcel count for the new parcel being added
-        $newParcelCount = $existingParcelCount + 1;
-
-        // Calculate the total number of parcels, including the main parcel
-        $totalParcels = $newParcelCount ; // Main parcel + new parcel
-
-        // Recalculate the weight for the main parcel and new parcel based on total parcel count
-        // The weight is divided by the total number of parcels
-        $newWeight = strval(min($entity->width / 20 / $totalParcels, 49));
+        // Calculate the total weight for the parcels
+        $baseWeight = $entity->width / 20;
+        $weightPerParcel = strval(round(min($baseWeight / $totalParcels, 49), 3));  // Split weight equally
 
         // Determine the size for the parcel based on recalculated dimensions
-        $newParcelSize = self::determineParcelSize($entity, $totalParcels);
+        $parcelSize = self::determineParcelSize($entity, $totalParcels);
 
-        // Update the main parcel's weight and size in the JSON data
-        $data['parcelServiceData']['parcelParams']['weight'] = $newWeight;
-        $data['parcelServiceData']['parcelServices'][0] = $newParcelSize; // Update the first element as parcel size
+        // Update the main parcel's weight and size in the JSON data (first parcel)
+        $data['parcelServiceData']['parcelParams']['weight'] = $weightPerParcel;
+        $data['parcelServiceData']['parcelServices'][0] = $parcelSize; // Update the first element as parcel size
 
-        // Prepare the new parcel data to be added to the multipartParcelData section
-        $data['multipartParcelData'][] = [
-            'addParcelData'         => [
-                'recordID'         => $entity->id . '/' . $newParcelCount, // Unique record ID for this parcel
-                'prefixParcelCode' => $entity->is_balikovna_on_address == 1 ? 'DR' : 'NB', // Prefix based on address
-                'weight'           => $newWeight, // Set weight for the new parcel
-                'sequenceParcel'   => $newParcelCount, // Sequence number of this parcel
-                'quantityParcel'   => $totalParcels, // Total number of parcels in this multi-part shipment
-            ],
-            'addParcelDataServices' => [
-                '70', // Service code for multi-part parcel
-                $newParcelSize, // Size of this parcel
-            ],
-        ];
+        // If there are multiple parcels, add '70' to the first parcel as well
+        if ($totalParcels > 1) {
+            // Add '70' to the first parcel's services if we have multiple parcels
+            $data['parcelServiceData']['parcelServices'][] = '70';
+        }
+
+        // Prepare the parcel data for each additional parcel
+        $data['multipartParcelData'] = [];
+        for ($i = 2; $i <= $totalParcels; $i++) {
+            $data['multipartParcelData'][] = [
+                'addParcelData' => [
+                    'recordID'         => $entity->id . '/' . $i, // Unique record ID for this parcel
+                    'prefixParcelCode' => $entity->is_balikovna_on_address == 1 ? 'DR' : 'NB', // Prefix based on address
+                    'weight'           => $weightPerParcel, // Set weight for the parcel
+                    'sequenceParcel'   => $i, // Sequence number of this parcel
+                    'quantityParcel'   => $totalParcels, // Total number of parcels in this multi-part shipment
+                ],
+                'addParcelDataServices' => [
+                    '70', // Service code for multi-part parcel
+                    $parcelSize, // Size of this parcel
+                ],
+            ];
+        }
 
         // Update the main parcel data with the total quantity of parcels
         $data['parcelServiceData']['parcelParams']['quantityParcel'] = $totalParcels;
         $data['parcelServiceData']['parcelParams']['sequenceParcel'] = 1; // The first parcel in the sequence
 
         // If this is the first multipart parcel, ensure that the '70' service is added for multipart shipments
-        if ($isNewMultipart) {
+        if (empty($data['parcelServiceData']['parcelServices'])) {
             $data['parcelServiceData']['parcelServices'][] = '70';
         }
 
-        // Return the updated JSON string with the new parcel added
+        // Return the updated JSON string with all the parcels added
         return json_encode($data, JSON_UNESCAPED_UNICODE);
     }
 
