@@ -142,40 +142,83 @@ class Balikovna
         return self::getResponse($endpoint, $params, 'GET');
     }
 
-    public static function createFrom(
-        Entity $entity,
-        string $type = ''
-    )
+    public static function createFrom(Entity $entity, string $type = '')
     {
         $type = $type ?: $entity->default_parcel_type;
 
         // Generate the request data
         $data = self::generateJson($entity);
 
-        // Send the request and get the response
-        $response = self::getResponse('parcelService', json_decode($data));
+        $encodedLabels = [];
+        $parcelCodes = [];
 
-        // Check if the response is successful and contains the label file
-        if ($response->success && isset($response->data->responseHeader->responsePrintParams->file)) {
-            // Get the base64 encoded label
-            $encodedLabel = $response->data->responseHeader->responsePrintParams->file;
-            // Get the parcel code
-            $parcelCode = $response->data->responseHeader->resultParcelData[0]->parcelCode;
-            // Save the label as a PDF using the parcel code as the filename
-            self::saveLabelAsPdf($encodedLabel, $parcelCode);
+        // Check if the entity is not a Balikovna on address and has more than one parcel
+        if ($entity->parcel_count > 1 && !$entity->is_balikovna_on_address) {
+            for ($i = 0; $i < $entity->parcel_count; $i++) {
+                // Optionally modify the data for each parcel if needed
+                $parcelData = self::generateJson($entity);
 
-            // Return the parcel code and the response
+                // Adjust amount based on parcel count if needed
+                $parcelParams['amount'] = $entity->total / $entity->parcel_count; // Dobírka service
 
-            $protoParcel = (object)[
-                'id' => $parcelCode,
-            ];
-            return $response->success([$protoParcel]);
+                // Send the request and get the response
+                $response = self::getResponse('parcelService', json_decode($parcelData));
 
+                // Check if the response is successful and contains the label file
+                if ($response->success && isset($response->data->responseHeader->responsePrintParams->file)) {
+                    // Get the base64 encoded label
+                    $encodedLabel = $response->data->responseHeader->responsePrintParams->file;
+                    // Get the parcel code
+                    $parcelCode = $response->data->responseHeader->resultParcelData[0]->parcelCode;
+
+                    // Collect encoded labels and parcel codes
+                    $encodedLabels[] = $encodedLabel;
+                    $parcelCodes[] = $parcelCode;
+                } else {
+                    $response->fail(collect($response->data->responseHeader?->resultParcelData[0]?->parcelStateResponse)->implode('responseText', ', '));
+                    return $response;
+                }
+            }
+
+            // Merge all encoded labels into one PDF if needed
+            foreach ($encodedLabels as $index => $encodedLabel) {
+                $fileName = $parcelCodes[$index];
+                self::saveLabelAsPdf($encodedLabel, $fileName);
+            }
+
+            // Return the parcel codes and the response
+            $protoParcels = array_map(fn($parcelCode) => (object)['id' => $parcelCode], $parcelCodes);
+            return $response->success($protoParcels);
+
+        } else {
+            // Handle single parcel or Balikovna on address
+            if ($entity->parcel_count > 1 && $entity->is_balikovna_on_address == 1) {
+                $data = self::addParcelToJson($data, $entity);
+            }
+
+            // Send the request and get the response
+            $response = self::getResponse('parcelService', json_decode($data));
+
+            // Check if the response is successful and contains the label file
+            if ($response->success && isset($response->data->responseHeader->responsePrintParams->file)) {
+                // Get the base64 encoded label
+                $encodedLabel = $response->data->responseHeader->responsePrintParams->file;
+                // Get the parcel code
+                $parcelCode = $response->data->responseHeader->resultParcelData[0]->parcelCode;
+                // Save the label as a PDF using the parcel code as the filename
+                self::saveLabelAsPdf($encodedLabel, $parcelCode);
+
+                // Return the parcel code and the response
+                $protoParcel = (object)[
+                    'id' => $parcelCode,
+                ];
+                return $response->success([$protoParcel]);
+
+            }
+            $response->fail(collect($response->data->responseHeader?->resultParcelData[0]?->parcelStateResponse)->implode('responseText', ', '));
+
+            return $response;
         }
-
-        $response->fail(collect($response->data->responseHeader?->resultParcelData[0]?->parcelStateResponse)->implode('responseText', ', '));
-
-        return $response;
     }
 
     private static function saveLabelAsPdf(string $encodedLabel, string $fileName)
@@ -255,7 +298,7 @@ class Balikovna
         ];
 
         if ($entity->payment == 'Dobírka') {
-            $parcelParams['amount'] = $entity->total; // Dobírka service
+            $parcelParams['amount'] = $entity->is_balikovna_on_address ? $entity->total : ($entity->total / $entity->parcel_count); // Dobírka service
             $parcelParams['currency'] = $entity->currency; // Dobírka currency
             $parcelParams['vsVoucher'] = strval($entity->id); // Variabilní symbol for service 41
             $parcelServices[] = '41'; // Add 'Dobírka' service
@@ -348,13 +391,13 @@ class Balikovna
 
         // Determine how many existing parcels there are
         // If this is a new multipart, start with 0, else count existing multipart parcels
-        $existingParcelCount = $isNewMultipart ? 0 : count($data['multipartParcelData']);
+        $existingParcelCount = $isNewMultipart ? 1 : count($data['multipartParcelData']);
 
         // Increment the parcel count for the new parcel being added
         $newParcelCount = $existingParcelCount + 1;
 
         // Calculate the total number of parcels, including the main parcel
-        $totalParcels = $newParcelCount + 1; // Main parcel + new parcel
+        $totalParcels = $newParcelCount ; // Main parcel + new parcel
 
         // Recalculate the weight for the main parcel and new parcel based on total parcel count
         // The weight is divided by the total number of parcels
@@ -404,8 +447,8 @@ class Balikovna
         // If balikovna is on the address, use the order address directly
         if ($entity?->is_balikovna_on_address == 1) {
             return [
-                'firstName'      => $entity->customer->firstName,
-                'surname'        => $entity->customer->surname,
+                'firstName'      => $entity->firstName,
+                'surname'        => $entity->lastName,
                 'company'        => $entity->billing_company ?? '',
                 // neptaj se na ičo ? nikde
                 'aditionAddress' => $entity->private_note ?? '',
@@ -424,19 +467,18 @@ class Balikovna
             ];
         } else {
             // Parse Balikovna address from JSON
-            $balikovnaData = json_decode($entity->balikovna_data, true);
 
             return [
                 'recordID'       => strval($entity->id),
-                'firstName'      => $entity->customer->firstName,
-                'surname'        => $entity->customer->surname,
+                'firstName'      => $entity->firstName,
+                'surname'        => $entity->lastName,
                 'company'        => $entity->billing_company ?? '',
                 'aditionAddress' => $entity?->private_note ?? '',
                 // Doplňující informace k názvu adresát - Informace budou vytištěny na štítku
                 'address'        => [
                     'street'  => "BALÍKOVNA", // According to the documentation, the address is just 'BALÍKOVNA'
-                    'city'    => $balikovnaData['balikovna_name'],
-                    'zipCode' => $balikovnaData['balikovna_zip'],
+                    'city'    => $entity->balikovna_name,
+                    'zipCode' => $entity->balikovna_zip,
                 ],
                 'mobilNumber'    => $phone,
                 'phoneNumber'    => $phone,
