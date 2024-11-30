@@ -19,4 +19,13 @@ return [
             'name'        => 'Eshop name',
         ],
     ],
+
+    'BALIKOVNA_BASE_URL'        => 'https://b2b-test.postaonline.cz:444/restservices/ZSKService/v1/',
+    'BALIKOVNA_API_TOKEN'       => env('BALIKOVNA_API_TOKEN'),
+    'BALIKOVNA_SECRET_KEY'      => env('BALIKOVNA_SECRET_KEY'),
+    'BALIKOVNA_FORM_ID'         => 103,
+    'BALIKOVNA_CUSTOMER_ID'     => env('BALIKOVNA_CUSTOMER_ID'),
+    'BALIKOVNA_LOCATION_NUMBER' => env('BALIKOVNA_LOCATION_NUMBER', 4),
+    'BALIKOVNA_POST_CODE'       => env('BALIKOVNA_POST_CODE'),
+    'BALIKOVNA_ID_CCK'          => env('BALIKOVNA_ID_CCK'),
 ];

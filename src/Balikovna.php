@@ -34,7 +34,7 @@ class Balikovna
         $response = new CoreResponse();
         $apiToken = config('parcelable.BALIKOVNA_API_TOKEN');
         $secretKey = config('parcelable.BALIKOVNA_SECRET_KEY');
-        $baseUrl = 'https://b2b-test.postaonline.cz:444/restservices/ZSKService/v1/'; //vlastně sem potkal jenom tuhle testovací, tak nwm jaka je živá :D, snad jen bez test, jinak jim napišu
+        $baseUrl = config('parcelable.BALIKOVNA_BASE_URL');
         $url = $baseUrl . $endpoint;
 
         // Step 1: Prepare the data
@@ -411,12 +411,17 @@ class Balikovna
         $data['multipartParcelData'] = [];
         for ($i = 2; $i <= $totalParcels; $i++) {
             $data['multipartParcelData'][] = [
-                'addParcelData' => [
-                    'recordID'         => $entity->id . '/' . $i, // Unique record ID for this parcel
-                    'prefixParcelCode' => $entity->is_balikovna_on_address == 1 ? 'DR' : 'NB', // Prefix based on address
-                    'weight'           => $weightPerParcel, // Set weight for the parcel
-                    'sequenceParcel'   => $i, // Sequence number of this parcel
-                    'quantityParcel'   => $totalParcels, // Total number of parcels in this multi-part shipment
+                'addParcelData'         => [
+                    'recordID'         => $entity->id . '/' . $i,
+                    // Unique record ID for this parcel
+                    'prefixParcelCode' => $entity->is_balikovna_on_address == 1 ? 'DR' : 'NB',
+                    // Prefix based on address
+                    'weight'           => $weightPerParcel,
+                    // Set weight for the parcel
+                    'sequenceParcel'   => $i,
+                    // Sequence number of this parcel
+                    'quantityParcel'   => $totalParcels,
+                    // Total number of parcels in this multi-part shipment
                 ],
                 'addParcelDataServices' => [
                     '70', // Service code for multi-part parcel
