@@ -24,7 +24,7 @@ class Balikovna
      * @return array The decoded JSON response.
      * @throws Exception If there is a CURL error.
      */
-    private static function getResponse($endpoint, $data = null, $method = 'POST')
+    public static function getResponse($endpoint, $data = null, $method = 'POST')
     {
         $faultArrays = [
             'GetParcelStatusErrors',
@@ -213,10 +213,10 @@ class Balikovna
                     'id' => $parcelCode,
                 ];
                 return $response->success([$protoParcel]);
-
+            } else {
+//                dd($response);
+                $response->fail(collect($response->data->responseHeader?->resultParcelData[0]?->parcelStateResponse)->implode('responseText', ', '));
             }
-
-            $response->fail(collect($response->data->responseHeader?->resultParcelData[0]?->parcelStateResponse)->implode('responseText', ', '));
 
             return $response;
         }
