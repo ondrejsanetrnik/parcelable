@@ -2,6 +2,7 @@
 
 namespace Ondrejsanetrnik\Parcelable;
 
+use App\Models\Obstacle;
 use Exception;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
@@ -233,5 +234,52 @@ trait Parcelable
     public function getParcelCountAttribute(): int
     {
         return $this->getRawOriginal('parcel_count') ?? 1;
+    }
+
+    public function getPacketaParcelAttributesAttribute(): array
+    {
+        return [
+            'number'             => $this->id,
+            'name'               => $this->first_name,
+            'surname'            => $this->last_name,
+            'email'              => $this->email,
+            'phone'              => $this->phone,
+            'street'             => $this->street,
+            'houseNumber'        => $this->house_number,
+            'city'               => $this->city,
+            'zip'                => substr_replace($this->postal_code ?? '', ' ', 3, 0),
+            'addressId'          => $this->address_id,
+            'carrierPickupPoint' => $this->carrier_pickup_point,
+            'currency'           => $this->national_currency,
+            'size'               => $this->size_for_external_carrier,
+            'cod'                => $this->cod_for_parcel,
+            'value'              => $this->value_for_parcel,
+            'weight'             => min(10, $this->weight / 0.5 ?: 1),
+            'eshop'              => $this->eshop,
+        ];
+    }
+
+    public function validateParcel(): bool
+    {
+        switch ($this->carrier_name) {
+            case 'Zásilkovna':
+                $response = Packeta::packetAttributesValid($this->packeta_parcel_attributes);
+
+                if (!$response->success) {
+                    Obstacle::firstOrCreate([
+                        'type'     => 'parcel',
+                        'message'  => $response->message,
+                        'order_id' => $this->id,
+                    ], [
+                        'state' => 'danger',
+                    ]);
+                }
+
+                $this->update(['parcel_validated_at' => now()]);
+
+                return $response->success;
+            default:
+                abort(501, 'Carrier ' . $this->carrier_name . ' not supported for validation');
+        }
     }
 }

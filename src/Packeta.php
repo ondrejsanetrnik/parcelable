@@ -13,6 +13,7 @@ use SoapFault;
  * @method static createPacketClaimWithPassword(array $array)
  * @method static packetLabelPdf($id, string $string, int $int)
  * @method static createPacket(array $array)
+ * @method static packetAttributesValid(array $array)
  */
 class Packeta
 {
@@ -93,25 +94,7 @@ class Packeta
             switch ($type) {
                 case 'parcel':
                     # Post a parcel
-                    $response = self::createPacket([
-                        'number'             => $entity->id,
-                        'name'               => $entity->first_name,
-                        'surname'            => $entity->last_name,
-                        'email'              => $entity->email,
-                        'phone'              => $entity->phone,
-                        'street'             => $entity->street,
-                        'houseNumber'        => $entity->houseNumber,
-                        'city'               => $entity->city,
-                        'zip'                => substr_replace($entity->postal_code ?? '', ' ', 3, 0),
-                        'addressId'          => $entity->address_id,
-                        'carrierPickupPoint' => $entity->carrier_pickup_point,
-                        'currency'           => $entity->national_currency,
-                        'size'               => $entity->size_for_external_carrier,
-                        'cod'                => $entity->cod_for_parcel,
-                        'value'              => $entity->value_for_parcel,
-                        'weight'             => min(10, $entity->weight / 0.5 ?: 1),
-                        'eshop'              => $entity->eshop,
-                    ]);
+                    $response = self::createPacket($entity->packeta_parcel_attributes);
 
                     if ($response->success) {
                         # Get and save the label
