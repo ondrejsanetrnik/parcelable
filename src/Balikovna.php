@@ -35,18 +35,21 @@ class Balikovna
         $apiToken = config('parcelable.BALIKOVNA_API_TOKEN');
         $secretKey = config('parcelable.BALIKOVNA_SECRET_KEY');
         $baseUrl = config('parcelable.BALIKOVNA_BASE_URL');
+        if(\App::isLocal()){
+            $baseUrl = 'https://b2b-test.postaonline.cz:444/restservices/ZSKService/v1/';
+        }
         $url = $baseUrl . $endpoint;
 
         // Step 1: Prepare the data
         $payload = $data ? json_encode($data) : null; // Prepare POST data
 
         // Step 2: Generate the headers for authorization
-        $timestamp = time();
+        $timestamp = strtotime(now());
         $nonce = uniqid('', true);
         $contentSha256 = $payload ? hash('sha256', $payload) : ''; // SHA256 of the payload
         $signature = hash_hmac('sha256', $contentSha256 . ';' . $timestamp . ';' . $nonce, $secretKey, true);
         $base64Signature = base64_encode($signature);
-
+        Log::info('timestamp ' . $timestamp);
         // Step 3: Set the headers for the request
         $headers = [
             'Content-Type: application/json;charset=UTF-8',
@@ -175,7 +178,8 @@ class Balikovna
                     $encodedLabels[] = $encodedLabel;
                     $parcelCodes[] = $parcelCode;
                 } else {
-                    $response->fail(collect($response->data->responseHeader?->resultParcelData[0]?->parcelStateResponse)->implode('responseText', ', '));
+                    Log::info($response);
+                    $response->fail(collect($response->data?->responseHeader?->resultParcelData[0]?->parcelStateResponse)->implode('responseText', ', '));
                     return $response;
                 }
             }
