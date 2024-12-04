@@ -42,7 +42,6 @@ class Balikovna
 
         // Step 1: Prepare the data
         $payload = $data ? json_encode($data) : null; // Prepare POST data
-
         // Step 2: Generate the headers for authorization
         $timestamp = strtotime(now());
         $nonce = uniqid('', true);
@@ -71,10 +70,10 @@ class Balikovna
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 
         // Disable SSL verification for test environment
-        if ($baseUrl == 'https://b2b-test.postaonline.cz:444/restservices/ZSKService/v1/') {
+//        if (\App::isLocal()) {
             curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
             curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-        }
+//        }
 
         // Step 5: Execute the request
         $balikovnaResponse = curl_exec($ch);
@@ -83,7 +82,6 @@ class Balikovna
         if ($balikovnaResponse === false) return $response->fail('curl_error:"' . curl_error($ch) . '";curl_errno:' . curl_errno($ch));
 
         curl_close($ch);
-
         $balikovnaObject = json_decode($balikovnaResponse);
 
         # Compile faults from all endpoints into one collection
@@ -151,7 +149,6 @@ class Balikovna
 
         // Generate the request data
         $data = self::generateJson($entity);
-
         $encodedLabels = [];
         $parcelCodes = [];
 
@@ -178,12 +175,11 @@ class Balikovna
                     $encodedLabels[] = $encodedLabel;
                     $parcelCodes[] = $parcelCode;
                 } else {
-                    Log::info($response);
+                    dd($response);
                     $response->fail(collect($response->data?->responseHeader?->resultParcelData[0]?->parcelStateResponse)->implode('responseText', ', '));
                     return $response;
                 }
             }
-
             // Merge all encoded labels into one PDF if needed
             foreach ($encodedLabels as $index => $encodedLabel) {
                 $fileName = $parcelCodes[$index];
@@ -197,7 +193,6 @@ class Balikovna
         } else {
             // Handle single parcel or Balikovna on address
             if ($entity->parcel_count > 1 && $entity->is_balikovna_on_address == 1) {
-
                 $data = self::addParcelToJson($data, $entity);
             }
 
