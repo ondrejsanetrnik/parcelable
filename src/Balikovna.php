@@ -218,7 +218,7 @@ class Balikovna
                 ];
                 return $response->success([$protoParcel]);
             } else {
-                Log::info($response);
+                dd($response);
                 $response->fail(collect($response->data->responseHeader?->resultParcelData[0]?->parcelStateResponse)->implode('responseText', ', '));
             }
 
