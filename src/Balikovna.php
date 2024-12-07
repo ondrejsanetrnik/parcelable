@@ -35,26 +35,45 @@ class Balikovna
         $apiToken = config('parcelable.BALIKOVNA_API_TOKEN');
         $secretKey = config('parcelable.BALIKOVNA_SECRET_KEY');
         $baseUrl = config('parcelable.BALIKOVNA_BASE_URL');
-        if(\App::isLocal()){
+
+        if (\App::isLocal()) {
             $baseUrl = 'https://b2b-test.postaonline.cz:444/restservices/ZSKService/v1/';
         }
+
         $url = $baseUrl . $endpoint;
 
-        // Step 1: Prepare the data
+        // Step 1: Prepare the data (payload)
         $payload = $data ? json_encode($data) : null; // Prepare POST data
-        // Step 2: Generate the headers for authorization
+
+        // Step 2: Generate the timestamp and nonce
         $timestamp = strtotime(now());
         $nonce = uniqid('', true);
-        $contentSha256 = $payload ? hash('sha256', $payload) : ''; // SHA256 of the payload
-        $signature = hash_hmac('sha256', $contentSha256 . ';' . $timestamp . ';' . $nonce, $secretKey, true);
+
+        if ($method === 'POST' && $payload) {
+            // For POST requests, calculate the SHA256 hash of the payload
+            $contentSha256 = hash('sha256', $payload);
+            // For POST requests, the signature includes the body hash, timestamp, and nonce
+            $signatureData = $contentSha256 . ';' . $timestamp . ';' . $nonce;
+        } else {
+            // For GET requests, there is no body, so the hash is for an empty string
+            $contentSha256 = ''; // Empty string for GET requests (no body)
+            // For GET requests, the signature includes only the timestamp and nonce
+            $signatureData = ';' . $timestamp . ';' . $nonce;
+        }
+
+        // Step 3: Generate the HMAC SHA256 signature
+        $signature = hash_hmac('sha256', $signatureData, $secretKey, true);
         $base64Signature = base64_encode($signature);
+
+        // Log the timestamp for debugging purposes
         Log::info('timestamp ' . $timestamp);
-        // Step 3: Set the headers for the request
+
+        // Step 4: Set the headers for the request
         $headers = [
             'Content-Type: application/json;charset=UTF-8',
             'API-Token: ' . $apiToken,
             'Authorization-Timestamp: ' . $timestamp,
-            'Authorization-Content-SHA256: ' . $contentSha256,
+            'Authorization-Content-SHA256: ' . $contentSha256, // For POST requests
             'Authorization: CP-HMAC-SHA256 nonce="' . $nonce . '" signature="' . $base64Signature . '"',
         ];
 
@@ -108,7 +127,7 @@ class Balikovna
      * @return array The response from the API.
      */
 
-    public static function parcelStatus(array $parcelIds, string $language = 'CZ'): CoreResponse
+    public static function getParcelStatus(array $parcelIds, string $language = 'CZ'): CoreResponse
     {
         // Ensure the number of parcel IDs does not exceed 10
         if (count($parcelIds) > 10) {
@@ -117,12 +136,36 @@ class Balikovna
 
         // Prepare the request data
         $requestData = [
-            'parcelIds' => $parcelIds, //zase čarový kod, i když jednou se to v documentaci jmenuje Id a občas code
+            'parcelIds' => $parcelIds, // "parcelIds" used in the request
             'language'  => $language,
         ];
 
-        // Send the request and return the response
-        return self::getResponse('parcelStatus', $requestData);
+        // Get the response from the API
+        $response = self::getResponse('parcelStatus', $requestData);
+
+        // Process the response if successful
+        if ($response->success) {
+            // Prepare the response data with the latest status and storedUntil
+            $processedData = collect($response->data->detail)->map(function($parcelDetail) {
+                // Extract the latest parcel status based on date
+                $latestStatus = collect($parcelDetail->parcelStatuses)
+                    ->sortByDesc('date') // Sort the statuses by date in descending order
+                    ->first();
+
+                // Return an object with the updated status and storedUntil
+                return (object)[
+                    'status' => $latestStatus->text ?? '', // Assign the latest status text
+                    'storedUntil' => $parcelDetail->timeDeposit ?? null, // Use timeDeposit or null
+                ];
+            });
+
+            // Set the processed data to the response object
+            $response->data->status = $processedData->pluck('status')->first();
+            $response->data->storedUntil = $processedData->pluck('storedUntil')->first();
+        }
+
+        // Return the processed response
+        return $response;
     }
 
     public static function getParcelHistory(string $parcelID): CoreResponse
@@ -195,7 +238,6 @@ class Balikovna
             if ($entity->parcel_count > 1 && $entity->is_balikovna_on_address == 1) {
                 $data = self::addParcelToJson($data, $entity);
             }
-
             // Send the request and get the response
             $response = self::getResponse('parcelService', json_decode($data));
             // Check if the response is successful and contains the label file
