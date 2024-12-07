@@ -11,7 +11,7 @@
     "minimum-stability": "dev",
     "require": {
         "ondrejsanetrnik/helper": "dev-master",
-        "ondrejsanetrnik/core": "dev-main"
+        "ondrejsanetrnik/core": "dev-main || dev-master"
     },
     "autoload": {
         "psr-4": {
