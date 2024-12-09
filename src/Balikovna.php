@@ -319,8 +319,8 @@ class Balikovna
         // Prepare parcelParams
         $parcelParams = [
             'weight' => $entity->is_balikovna_on_address == 1
-                ? strval(round(min($entity->width / 20, 30), 2))  // Max limit 30 if is_balikovna_on_address is 1
-                : strval(round(min($entity->width / 20, 14), 2)), // Max limit 14 otherwise
+                ? strval(round(min($entity->width / 200, 30), 2))  // Max limit 30 if is_balikovna_on_address is 1
+                : strval(round(min($entity->width / 200, 14), 2)), // Max limit 14 otherwise
             'prefixParcelCode' => $entity->is_balikovna_on_address == 1 ? 'DR' : 'NB', // Prefix for parcel code
             'recordID'         => strval($entity->id), // internal ID
             'insuredValue'     => $entity->total * 2, // insurance, double the price of goods
