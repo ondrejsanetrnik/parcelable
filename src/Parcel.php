@@ -84,6 +84,7 @@ class Parcel extends Entity
                     'de' => 'https://www.gls-pakete.de/sendungsverfolgung',
                     default => 'https://gls-group.eu/CZ/en/parcel-tracking',
                 } . '?match=' . $this->tracking_number,
+            'Balíkovna' => 'https://www.balikovna.cz/cs/sledovat-balik/-/balik/' . $this->tracking_number,
             default => 'https://tracking.packeta.com/' . $language . '/?id=' . $this->tracking_number,
         };
     }
