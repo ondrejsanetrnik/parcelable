@@ -319,7 +319,7 @@ class Balikovna
         // Prepare parcelParams
         $parcelParams = [
             'weight' => $entity->is_balikovna_on_address == 1
-                ? strval(round(min($entity->width / 50, 30), 3))  // Max limit 30 if is_balikovna_on_address is 1
+                ? strval(round(min($entity->width / 50, 29), 3))  // Max limit 30 if is_balikovna_on_address is 1
                 : strval(round(min($entity->width / 50, 14), 3)), // Max limit 14 otherwise
             'prefixParcelCode' => $entity->is_balikovna_on_address == 1 ? 'DR' : 'NB', // Prefix for parcel code
             'recordID'         => strval($entity->id), // internal ID
@@ -434,8 +434,8 @@ class Balikovna
         $totalParcels = $entity->parcel_count;
 
         // Calculate the total weight for the parcels
-        $baseWeight = $entity->width / 20;
-        $weightPerParcel = strval(round(min($baseWeight / $totalParcels, 49), 3));  // Split weight equally
+        $baseWeight = $entity->width / 50;
+        $weightPerParcel = strval(round(min($baseWeight / $totalParcels, 29), 3));  // Split weight equally
 
         // Determine the size for the parcel based on recalculated dimensions
         $parcelSize = self::determineParcelSize($entity, $totalParcels);
