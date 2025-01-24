@@ -137,6 +137,12 @@ class Packeta
         return $response;
     }
 
+    /**
+     * Get the label from Packeta API and save it to storage
+     *
+     * @param int $id
+     * @return void
+     */
     public static function getLabel(int $id): void
     {
         $response = self::packetLabelPdf($id, config('parcelable.PACKETA_LABEL_FORMAT'), 0);
