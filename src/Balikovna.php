@@ -342,7 +342,7 @@ class Balikovna
         ];
 
         if ($entity->payment == 'Dobírka') {
-            $parcelParams['amount'] = $entity->is_balikovna_on_address ? $entity->total : ($entity->total / $entity->parcel_count); // Dobírka service
+            $parcelParams['amount'] = $entity->is_balikovna_on_address ? $entity->due : ($entity->due / $entity->parcel_count); // Dobírka service
             $parcelParams['currency'] = $entity->currency; // Dobírka currency
             $parcelParams['vsVoucher'] = strval($entity->id); // Variabilní symbol for service 41
             $parcelServices[] = '41'; // Add 'Dobírka' service
