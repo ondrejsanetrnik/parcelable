@@ -66,8 +66,12 @@ class Packeta
      * @param int $parcelNumber
      * @return CoreResponse
      */
-    public static function getParcelStatus(int $parcelNumber): CoreResponse
+    public static function getParcelStatus(string|int $parcelNumber): CoreResponse
     {
+        if (!is_int($parcelNumber)) {
+            $parcelNumber = intval(ltrim($parcelNumber, 'Zz'));
+        }
+
         $response = self::packetStatus($parcelNumber);
 
         if ($response->success) $response->data->status = self::STATUS_MAP[$response->data->codeText];

@@ -282,8 +282,12 @@ class Gls
      * @return CoreResponse
      *
      */
-    public static function getParcelStatus(int $parcelNumber): CoreResponse
+    public static function getParcelStatus(int|string $parcelNumber): CoreResponse
     {
+        if (!is_int($parcelNumber)) {
+            $parcelNumber = intval(ltrim($parcelNumber, 'Zz'));
+        }
+        //intval(ltrim($parcelNumber, 'Zz'))
         $request = '{"Username":"' . config('parcelable.GLS_USERNAME') . '","Password":' . self::hashPassword() . ',"ParcelNumber":' . $parcelNumber . ',"ReturnPOD":false,"LanguageIsoCode":"CS"}';
         $response = self::getResponse(self::URL, 'GetParcelStatuses', $request);
 

@@ -11,6 +11,19 @@ use Ondrejsanetrnik\Core\CoreResponse;
 class Balikovna
 {
 
+    public const STATUS_MAP = [
+        'Obdrženy údaje k zásilce.' => 'Čeká na vyzvednutí kurýrem',
+        'převzata do přepravy.' => 'Přijata k přepravě',
+        'Přeprava zásilky.' => 'V přeprave',
+        'Zásilka v přepravě.' => 'V přeprave',
+        'Zásilka uložena v Balíkovně.' => 'Připravena k vyzvednutí',
+        'uložení zásilky' => 'Připravena k vyzvednutí',
+        'blížící se konec úložní doby' => 'blížící se konec úložní doby',
+        'Zásilka byla vyzvednuta.' => 'Vyzvednuto',
+        'Odeslání zásilky zpět' => 'Na cestě zpátky',
+        'Vrácení zásilky odesílateli.' => 'Vráceno odesílateli',
+    ];
+
     /**
      * url of napi https://www.ceskaposta.cz/napi/b2b
      */
@@ -112,6 +125,89 @@ class Balikovna
         if ($faults->count()) {
             $response->fail($faults->implode('ErrorDescription', ', '));
         } else {
+            if (\App::isLocal()) {
+                $balikovnaObject = (object)[
+                    'detail' => [
+                        (object)[
+                            'idParcel'             => 'NB5847769990L',
+                            'parcelType'           => 'NB',
+                            'weight'               => '1.580',
+                            'amount'               => 356.0,
+                            'currency'             => '',
+                            'depositTo'            => '2025-02-19',
+                            'timeDeposit'          => 7,
+                            'countryOfOrigin'      => 'CZ',
+                            'countryOfDestination' => 'CZ',
+                            'parcelStatuses'       => [
+                                (object)[
+                                    'id'   => '-M',
+                                    'date' => '2025-02-11',
+                                    'text' => 'Obdrženy údaje k zásilce.',
+                                ],
+                                (object)[
+                                    'id'       => '21',
+                                    'date'     => '2025-02-11',
+                                    'text'     => 'Zásilka převzata do přepravy.',
+                                    'postCode' => '46307',
+                                    'name'     => 'Depo Liberec 70',
+                                ],
+                                (object)[
+                                    'id'       => '-I',
+                                    'date'     => '2025-02-11',
+                                    'text'     => 'Zásilka vypravena z třídícího centra.',
+                                    'postCode' => '22200',
+                                    'name'     => 'třídící centrum Praha',
+                                ],
+                                (object)[
+                                    'id'   => '43',
+                                    'date' => '2025-02-11',
+                                    'text' => 'E-mail adresátovi - zásilka převzata do přepravy.',
+                                ],
+                                (object)[
+                                    'id'   => '-F',
+                                    'date' => '2025-02-11',
+                                    'text' => 'Zásilka v přepravě.',
+                                ],
+                                (object)[
+                                    'id'   => '-K',
+                                    'date' => '2025-02-11',
+                                    'text' => 'Přeprava zásilky k Balíkovně.',
+                                ],
+                                (object)[
+                                    'id'       => '82',
+                                    'date'     => '2025-02-12',
+                                    'text'     => 'Zásilka uložena v Balíkovně.',
+                                    'postCode' => '46601',
+                                    'name'     => 'Jablonec nad Nisou 1',
+                                ],
+                                (object)[
+                                    'id'   => '42',
+                                    'date' => '2025-02-12',
+                                    'text' => 'SMS zpráva adresátovi - uložení zásilky.',
+                                ],
+                                (object)[
+                                    'id'   => '43',
+                                    'date' => '2025-02-12',
+                                    'text' => 'E-mail adresátovi - uložení zásilky.',
+                                ],
+                                (object)[
+                                    'id'   => '42',
+                                    'date' => '2025-02-14',
+                                    'text' => 'SMS zpráva adresátovi - blížící se konec úložní doby.',
+                                ],
+                                (object)[
+                                    'id'   => '43',
+                                    'date' => '2025-02-14',
+                                    'text' => 'Odeslání zásilky zpět - adresát zásilku nevyzvedl ve stanovené odběrní lhůtě.',
+                                ],
+                            ],
+                        ]
+                    ],
+                    'status'      => 'SMS zpráva adresátovi - blížící se konec úložní doby.',
+                    'storedUntil' => 7,
+                ];
+            }
+
             $response->success($balikovnaObject);
         }
 
@@ -127,8 +223,12 @@ class Balikovna
      * @return array The response from the API.
      */
 
-    public static function getParcelStatus(array $parcelIds, string $language = 'CZ'): CoreResponse
+    public static function getParcelStatus(array|string $parcelIds, string $language = 'CZ'): CoreResponse
     {
+        if (!is_array($parcelIds)) {
+            $parcelIds = [$parcelIds];
+        }
+
         // Ensure the number of parcel IDs does not exceed 10
         if (count($parcelIds) > 10) {
             return (new CoreResponse())->fail('Cannot request status for more than 10 parcels at a time.');
@@ -142,29 +242,39 @@ class Balikovna
 
         // Get the response from the API
         $response = self::getResponse('parcelStatus', $requestData);
-
         // Process the response if successful
         if ($response->success) {
-            // Prepare the response data with the latest status and storedUntil
+            // Prepare the response data with filtered statuses and storedUntil
             $processedData = collect($response->data->detail)->map(function($parcelDetail) {
-                // Extract the latest parcel status based on date
-                $latestStatus = collect($parcelDetail->parcelStatuses)
-                    ->sortByDesc('date') // Sort the statuses by date in descending order
-                    ->first();
+                // Get the last 3 parcelStatuses
+                $statuses = collect($parcelDetail->parcelStatuses);
 
-                // Return an object with the updated status and storedUntil
+                // Initialize status text as an empty string
+                $statusText = '';
+
+                // Loop through the last 3 statuses and check for specific keywords
+                foreach ($statuses as $status) {
+                    foreach (self::STATUS_MAP as $keyword => $mappedStatus) {
+                        if (strpos($status->text, $keyword) !== false) {
+                            $statusText = $mappedStatus;
+                        }
+                    }
+                }
+
+                // Return an object with the mapped status text and storedUntil
                 return (object)[
-                    'status' => $latestStatus->text ?? '', // Assign the latest status text
-                    'storedUntil' => $parcelDetail->timeDeposit ?? null, // Use timeDeposit or null
+                    'status' => $statusText, // Concatenate the filtered status texts
+                    'storedUntil' => $parcelDetail->depositTo ?? null, // Use timeDeposit or null
                 ];
             });
 
             // Set the processed data to the response object
+            $response->data->originalStatus = $response->data->status;
             $response->data->status = $processedData->pluck('status')->first();
             $response->data->storedUntil = $processedData->pluck('storedUntil')->first();
         }
 
-        // Return the processed response
+// Return the processed response
         return $response;
     }
 
