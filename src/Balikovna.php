@@ -434,8 +434,8 @@ class Balikovna
             'prefixParcelCode' => $entity->is_balikovna_on_address == 1 ? 'DR' : 'NB', // Prefix for parcel code
             'recordID'         => strval($entity->id), // internal ID
             'insuredValue'     => $entity->total * 2, // insurance, double the price of goods
-            'note'             => $entity->private_note ?? '', // internal note for the parcel
-            'notePrint'        => $entity->note ?? '', // for the label
+            'note'             => $entity->note ?? '', // internal note for the parcel
+            'notePrint'        => $entity->id ?? '', // for the label
         ];
 
 //        if ($entity->parcel_count > 1) {
@@ -609,7 +609,7 @@ class Balikovna
                 'surname'        => $entity->lastName,
                 'company'        => $entity->billing_company ?? '',
                 // neptaj se na ičo ? nikde
-                'aditionAddress' => $entity->private_note ?? '',
+                'aditionAddress' => $entity?->address_info ?? '',
                 // Doplňující informace k názvu adresát - Informace budou vytištěny na štítku
                 'address'        => [
                     'street'     => $entity->street,
@@ -631,7 +631,7 @@ class Balikovna
                 'firstName'      => $entity->firstName,
                 'surname'        => $entity->lastName,
                 'company'        => $entity->billing_company ?? '',
-                'aditionAddress' => $entity?->private_note ?? '',
+                'aditionAddress' => $entity?->address_info ?? '',
                 // Doplňující informace k názvu adresát - Informace budou vytištěny na štítku
                 'address'        => [
                     'street'  => "BALÍKOVNA", // According to the documentation, the address is just 'BALÍKOVNA'
