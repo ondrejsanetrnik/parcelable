@@ -29,6 +29,7 @@ class Packeta
         'delivery attempt'       => 'Doručována',
         'delivered'              => 'Doručena',
         'posted back'            => 'Na cestě zpátky',
+        'rejected by recipient'  => 'Na cestě zpátky',
         'returned'               => 'Vrácena obchodu',
         'cancelled'              => 'Stornována',
     ];
