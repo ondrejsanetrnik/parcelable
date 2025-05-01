@@ -3,6 +3,7 @@
 namespace Ondrejsanetrnik\Parcelable;
 
 use App\Models\Entity;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Ondrejsanetrnik\Core\CoreResponse;
 use SoapClient;
@@ -27,6 +28,7 @@ class Packeta
         'ready for pickup'       => 'Připravena k vyzvednutí',
         'handed to carrier'      => 'Doručována',
         'delivery attempt'       => 'Doručována',
+        'zbox delivery attempt'  => 'Doručována',
         'delivered'              => 'Doručena',
         'posted back'            => 'Na cestě zpátky',
         'rejected by recipient'  => 'Na cestě zpátky',
@@ -75,7 +77,14 @@ class Packeta
 
         $response = self::packetStatus($parcelNumber);
 
-        if ($response->success) $response->data->status = self::STATUS_MAP[$response->data->codeText];
+        if ($response->success) $response->data->status = self::STATUS_MAP[$response->data->codeText] ?? null;
+
+        if ($response->data->status === null) {
+            Log::warning('Packeta status not found', [
+                'code'         => $response->data->codeText,
+                'parcelNumber' => $parcelNumber,
+            ]);
+        }
 
         return $response;
     }
