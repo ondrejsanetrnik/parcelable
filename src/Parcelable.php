@@ -205,7 +205,7 @@ trait Parcelable
 
     public function getFdsAvailableAttribute(): bool
     {
-        return in_array($this->country, [
+        if (in_array($this->country, [
             'CZ',
             'SK',
             'HU',
@@ -214,16 +214,21 @@ trait Parcelable
             'HR',
             'DE',
             'AT',
-            'PL',
             'BE',
             'LU',
             'NL',
             'DK',
             'ES',
             'FR',
-            'GR',
             'PT',
-        ]);
+        ])) {
+            return true;
+        } elseif (in_array($this->country, [
+            'PL',
+            'GR',
+        ])) {
+            return $this->payment != 'Dobírka';
+        } else return false;
     }
 
     public function getDefaultParcelTypeAttribute(): string
