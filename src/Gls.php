@@ -327,4 +327,35 @@ class Gls
 
         return $response;
     }
+
+    public static function getCostFor(ParcelableContract $parcelable): float
+    {
+        $weight = $parcelable->weight * config('parcelable.GLS_WEIGHT_MULTIPLIER');
+
+        $zone = match ($parcelable->country) {
+            'CZ' => 0,
+            'SK', 'PL' => 1,
+            'DE', 'AT', 'HU' => 2,
+            'NL', 'LU', 'BE', 'DK', 'HR' => 3,
+            'EE', 'LT', 'LV', 'RO', 'SI' => 4,
+            'FR', 'BG', 'IT', 'SE' => 5,
+            'ES', 'PT' => 6,
+            'FI', 'GB', 'IE', 'CH', 'NO', 'UK', 'LI' => 7,
+            default => 8, # GR
+        };
+
+        $tollSurcharge = $parcelable->country == 'CZ' ? config('parcelable.GLS_TOLL_SURCHARGE_DOMESTIC') : config('parcelable.GLS_TOLL_SURCHARGE_FOREIGN');
+        $codCosts = $parcelable->country == 'CZ' ? config('parcelable.GLS_COD_COSTS_DOMESTIC') : config('parcelable.GLS_COD_COSTS_FOREIGN');
+        $codCosts += $parcelable->price_czk * config('parcelable.GLS_COD_CARD_PAYMENT');
+
+        $codSurcharge = $parcelable->is_cod ? $codCosts : 0;
+
+
+        $selectedCountryCosts = collect(config('parcelable.GLS_PRICE_LIST.' . $zone));
+
+        # Take the first cost that is greater than or equal to the weight
+        $baseCost = $selectedCountryCosts->first(fn($cost, $weightLimit) => $weight <= $weightLimit);
+
+        return round($baseCost + (config('parcelable.GLS_DIESEL_SURCHARGE') * $baseCost) + ceil($weight) * $tollSurcharge + $codSurcharge, 2);
+    }
 }

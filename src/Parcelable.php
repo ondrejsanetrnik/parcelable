@@ -69,7 +69,7 @@ trait Parcelable
         return match ($this->delivery) {
             'PACKETA', 'Packeta', 'Zásilkovna' => 'Zásilkovna',
             'GlsParcelShop', 'Zaslat na adresu', 'GLS' => 'GLS',
-            'Balíkovna', 'BalikovnaNaAdresu' => 'Balíkovna', //Michal edit
+            'Balíkovna', 'BalikovnaNaAdresu' => 'Balíkovna',
             default => null,
         };
     }
@@ -286,5 +286,10 @@ trait Parcelable
             default:
                 abort(501, 'Carrier ' . $this->carrier_name . ' not supported for validation');
         }
+    }
+
+    public function getShippingCostAttribute()
+    {
+        return $this->is_delivered_by_shipping ? $this->carrier_class::getCostFor($this) : 0;
     }
 }

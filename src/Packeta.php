@@ -156,4 +156,40 @@ class Packeta
         $response = self::packetLabelPdf($id, config('parcelable.PACKETA_LABEL_FORMAT'), 0);
         Storage::disk('private')->put('labels/' . $id . '.pdf', $response->data);
     }
+
+
+    public static function getCostFor(ParcelableContract $parcelable): float
+    {
+        $weight = $parcelable->weight * 1.85;
+
+        $baseCosts = [ # TODO really rough, needs to be improved
+                       'CZ' => [
+                           5  => 42,
+                           99 => 62,
+                       ],
+                       'SK' => [
+                           5  => 62,
+                           99 => 72,
+                       ],
+                       'PL' => [
+                           5  => 145,
+                           99 => 165,
+                       ],
+                       'DE' => [
+                           5  => 145,
+                           99 => 165,
+                       ],
+        ];
+
+        $dieselSurcharge = $weight > 5 ? 3.1 : 2.1;
+        $tollSurcharge = $weight > 5 ? 4.8 : 2.1;
+        $codSurcharge = $parcelable->is_cod ? 15 : 0;
+
+        $selectedCountryCosts = collect($baseCosts[$parcelable->country] ?? $baseCosts['DE']);
+
+        # Take the first cost that is greater than or equal to the weight
+        $baseCost = $selectedCountryCosts->first(fn($cost, $weightLimit) => $weight <= $weightLimit);
+
+        return round($baseCost + $dieselSurcharge + $tollSurcharge + $codSurcharge, 2);
+    }
 }
