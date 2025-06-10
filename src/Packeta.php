@@ -3,6 +3,7 @@
 namespace Ondrejsanetrnik\Parcelable;
 
 use App\Models\Entity;
+use Exception;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Ondrejsanetrnik\Core\CoreResponse;
@@ -66,8 +67,9 @@ class Packeta
     /**
      * Checks the parcel status in Packeta API
      *
-     * @param int $parcelNumber
+     * @param string|int $parcelNumber
      * @return CoreResponse
+     * @throws Exception
      */
     public static function getParcelStatus(string|int $parcelNumber): CoreResponse
     {
@@ -77,13 +79,17 @@ class Packeta
 
         $response = self::packetStatus($parcelNumber);
 
-        if ($response->success) $response->data->status = self::STATUS_MAP[$response->data->codeText] ?? null;
+        if ($response->success) {
+            $status = self::STATUS_MAP[$response->data->codeText] ?? null;
 
-        if ($response->data->status === null) {
-            Log::warning('Packeta status not found', [
-                'code'         => $response->data->codeText,
-                'parcelNumber' => $parcelNumber,
-            ]);
+            if ($status === null) {
+                Log::channel('separated')->warning('Packeta status not found', [
+                    'code'         => $response->data->codeText,
+                    'parcelNumber' => $parcelNumber,
+                ]);
+            }
+
+            $response->data->status = $status;
         }
 
         return $response;

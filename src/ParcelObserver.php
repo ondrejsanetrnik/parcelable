@@ -2,8 +2,7 @@
 
 namespace Ondrejsanetrnik\Parcelable;
 
-use Illuminate\Support\Facades\App;
-use Ondrejsanetrnik\Parcelable\Parcel;
+use Illuminate\Support\Facades\Log;
 
 class ParcelObserver
 {
@@ -30,7 +29,11 @@ class ParcelObserver
             array_key_exists('status', $parcel->getChanges()) ||
             array_key_exists('parcelable_id', $parcel->getChanges())
         ) {
-            $parcel->parcelable?->fire('updated', 'parcelChange');
+            try {
+                $parcel->parcelable?->fire('updated', 'parcelChange');
+            } catch (\Throwable $e) {
+                Log::channel('separated')->warning('Parcelable failed to fire parcelChange for ' . $parcel->parcelable->model_name_identifier);
+            }
         }
     }
 }

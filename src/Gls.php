@@ -293,6 +293,12 @@ class Gls
 
         if ($response->success) {
 
+            if (!$response->data) {
+                Log::channel('separated')->warning('GLS parcel status has empty data!', [
+                    'response' => json_encode($response),
+                ]);
+            }
+
             $statuses = collect($response->data->ParcelStatusList);
 
             foreach ($statuses as $statusObject) {
