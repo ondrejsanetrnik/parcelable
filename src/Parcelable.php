@@ -68,7 +68,7 @@ trait Parcelable
     {
         return match ($this->delivery) {
             'PACKETA', 'Packeta', 'Zásilkovna' => 'Zásilkovna',
-            'GlsParcelShop', 'Zaslat na adresu', 'GLS' => 'GLS',
+            'GlsParcelShop', 'GLS ParcelShop', 'Zaslat na adresu', 'GLS' => 'GLS',
             'Balíkovna', 'BalikovnaNaAdresu' => 'Balíkovna',
             default => null,
         };
