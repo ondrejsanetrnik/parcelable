@@ -178,10 +178,6 @@ class Gls
 
         $isClaim = $type == 'claim';
 
-
-        //TODO
-//        "Máte poštovné zdarma po :countryCode": "You get free postage after :countryCode",
-//    "Máte poštovné po :countryCode zdarma": "You get free postage after :countryCode",
         $serviceList = [];
 
         if ($entity->gls_packeta) {
@@ -291,9 +287,8 @@ class Gls
     /**
      * Checks the parcel status in GLS API
      *
-     * @param int $parcelNumber
+     * @param int|string $parcelNumber
      * @return CoreResponse
-     *
      */
     public static function getParcelStatus(int|string $parcelNumber): CoreResponse
     {
@@ -351,8 +346,6 @@ class Gls
     {
         $weight = $parcelable->weight * config('parcelable.GLS_WEIGHT_MULTIPLIER');
 
-        //TODO parcelShop calculation
-
         $zone = match ($parcelable->country) {
             'CZ' => 0,
             'SK', 'PL' => 1,
@@ -368,6 +361,7 @@ class Gls
         $tollSurcharge = $parcelable->country == 'CZ' ? config('parcelable.GLS_TOLL_SURCHARGE_DOMESTIC') : config('parcelable.GLS_TOLL_SURCHARGE_FOREIGN');
         $codCosts = $parcelable->country == 'CZ' ? config('parcelable.GLS_COD_COSTS_DOMESTIC') : config('parcelable.GLS_COD_COSTS_FOREIGN');
         $codCosts += $parcelable->price_czk * config('parcelable.GLS_COD_CARD_PAYMENT');
+        $dieselSurcharge = config('parcelable.GLS_DIESEL_SURCHARGE');
 
         $codSurcharge = $parcelable->is_cod ? $codCosts : 0;
 
@@ -377,6 +371,15 @@ class Gls
         # Take the first cost that is greater than or equal to the weight
         $baseCost = $selectedCountryCosts->first(fn($cost, $weightLimit) => $weight <= $weightLimit);
 
-        return round($baseCost + (config('parcelable.GLS_DIESEL_SURCHARGE') * $baseCost) + ceil($weight) * $tollSurcharge + $codSurcharge, 2);
+        if ($parcelable->delivery == 'GLS ParcelShop') {
+            # If the delivery is to a ParcelShop, we use the costs for ParcelShop
+            if ($parcelable->country == 'CZ') {
+                $baseCost = 32;
+                $tollSurcharge = $dieselSurcharge = 0; # No toll surcharge for ParcelShop in CZ
+            } else
+                $baseCost = $baseCost - 27;
+        }
+
+        return round($baseCost + ($dieselSurcharge * $baseCost) + ceil($weight) * $tollSurcharge + $codSurcharge, 2);
     }
 }
