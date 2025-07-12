@@ -9,6 +9,7 @@ namespace Ondrejsanetrnik\Parcelable;
  * @property float $weight  Hmotnost zásilky v kg
  * @property string $country  Kód země (např. "CZ")
  * @property string $delivery
+ * @property int $carrier_id  ID externího přepravce
  */
 interface ParcelableContract
 {
@@ -21,4 +22,6 @@ interface ParcelableContract
     public function getCarrierPickupPointAttribute(): ?string;
 
     public function getDefaultParcelTypeAttribute(): string;
+
+    public function getIsCodAttribute(): bool;
 }
