@@ -156,7 +156,7 @@ trait Parcelable
         return $this->is_external_pickup_point ? $this->packeta_id : null;
     }
 
-    public function getAddressIdAttribute(): ?int
+    public function getAddressIdAttribute(): ?string
     {
         if ($this->delivery == 'Zásilkovna') {
             if ($this->is_zasilkovna_on_address) return $this->home_delivery_address_id;
