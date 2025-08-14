@@ -70,6 +70,7 @@ trait Parcelable
             'PACKETA', 'Packeta', 'Zásilkovna' => 'Zásilkovna',
             'GlsParcelShop', 'GLS ParcelShop', 'Zaslat na adresu', 'GLS' => 'GLS',
             'Balíkovna', 'BalikovnaNaAdresu' => 'Balíkovna',
+            'Allegro One' => 'Allegro One',
             default => null,
         };
     }
@@ -293,5 +294,15 @@ trait Parcelable
     public function getShippingCostAttribute()
     {
         return $this->is_delivered_by_shipping ? $this->carrier_class::getCostFor($this) : 0;
+    }
+
+    public function getAllegroOneFieldsAttribute(): array
+    {
+        return AllegroOne::getFieldsFor($this);
+    }
+
+    public function getAllegroOnePackagesAttribute(): array
+    {
+        return AllegroOne::getPackagesFor($this);
     }
 }

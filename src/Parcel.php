@@ -53,9 +53,10 @@ class Parcel extends Entity
     ];
 
     public const CARRIER_CLASS = [
-        'GLS'        => 'Ondrejsanetrnik\Parcelable\Gls',
-        'Zásilkovna' => 'Ondrejsanetrnik\Parcelable\Packeta',
-        'Balíkovna'  => 'Ondrejsanetrnik\Parcelable\Balikovna',
+        'GLS'         => 'Ondrejsanetrnik\Parcelable\Gls',
+        'Zásilkovna'  => 'Ondrejsanetrnik\Parcelable\Packeta',
+        'Balíkovna'   => 'Ondrejsanetrnik\Parcelable\Balikovna',
+        'Allegro One' => 'Ondrejsanetrnik\Parcelable\AllegroOne',
     ];
 
     /**
