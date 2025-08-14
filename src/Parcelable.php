@@ -205,6 +205,8 @@ trait Parcelable
 
     public function getFdsAvailableAttribute(): bool
     {
+        if (!$this->email) return false;
+
         if (in_array($this->country, [
             'CZ',
             'SK',
