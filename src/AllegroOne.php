@@ -98,7 +98,7 @@ class AllegroOne
             'insurance'           => number_format($parcelable->value_for_parcel, 2, '.', ''),
             'package_description' => $parcelable->text_for_parcel,
             'reference_number'    => $parcelable->id . ' ' . $parcelable->baselinker_id,
-            'currency_insurance'  => 'CZK',
+            'currency_insurance'  => $parcelable->currency,
         ]);
 
         return $collection->filter()->map(fn($v, $k) => ['id' => $k, 'value' => $v])->values()->toArray();
