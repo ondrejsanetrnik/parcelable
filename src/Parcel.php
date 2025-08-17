@@ -86,6 +86,7 @@ class Parcel extends Entity
                     default => 'https://gls-group.eu/CZ/en/parcel-tracking',
                 } . '?match=' . $this->tracking_number,
             'Balíkovna' => 'https://www.balikovna.cz/cs/sledovat-balik/-/balik/' . $this->tracking_number,
+            'Allegro One' => 'http://trace.wedo.cz/index.php?action=eSearch&orderNumber=' . $this->tracking_number_short,
             default => 'https://tracking.packeta.com/' . $language . '/?id=' . $this->tracking_number,
         };
     }
@@ -100,9 +101,24 @@ class Parcel extends Entity
         return self::CARRIER_CLASS[$this->carrier];
     }
 
+    public function getLabelNamePdfAttribute(): string
+    {
+        return str_replace('*', '-', $this->tracking_number) . '.pdf';
+    }
+
     public function getLabelPathAttribute(): string
     {
-        return Storage::disk('private')->path('labels/' . $this->tracking_number . '.pdf');
+        return Storage::disk('private')->path('labels/' . $this->label_name_pdf);
+    }
+
+    /**
+     * Returns only the characters up to the first asterisk
+     *
+     * @return string
+     */
+    public function getTrackingNumberShortAttribute(): string
+    {
+        return explode('*', $this->tracking_number)[0];
     }
 
     /**
@@ -132,6 +148,7 @@ class Parcel extends Entity
                     'name'            => $entity->name,
                     'cod'             => ceil($entity->cod_in_currency / ($entity->parcel_count ?: 1)),
                     'password'        => $protoParcel->password ?? null,
+                    'external_id'     => $protoParcel->external_id ?? null,
                     'type'            => $type,
                     'status'          => 'Čeká na vyzvednutí kurýrem',
                 ]);

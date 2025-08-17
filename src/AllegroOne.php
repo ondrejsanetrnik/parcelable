@@ -2,13 +2,18 @@
 
 namespace Ondrejsanetrnik\Parcelable;
 
+use App\Helpers\Api;
 use App\Models\Entity;
-use Baselinker\Baselinker;
-use Illuminate\Support\Facades\App;
+use Illuminate\Support\Facades\Storage;
 use Ondrejsanetrnik\Core\CoreResponse;
 
 class AllegroOne
 {
+
+    public const COURIER_IDS = [
+        'Allegro Kurier One'            => '0856a050-3310-44eb-8ad6-0a3151c1da58',
+        'Allegro Automaty Paczkowe One' => '3acc38bc-1db9-4238-b7f7-11c76ab6e905',
+    ];
 
     /**
      * Creates a proto parcel object from given entity
@@ -23,25 +28,42 @@ class AllegroOne
         string $type = ''
     ): CoreResponse
     {
-        $response = new CoreResponse();
+        $coreResponse = new CoreResponse();
 
-        if (App::isProduction())
-            return $response->fail('Podávání zásilek přes Allegro One zatím není podporováno - odlož balíček a pokračuj na další.'); // TODO: Implement createFrom method
+        if (!$entity->baselinker_id) return $coreResponse->fail('Objednávka nemá Baselinker ID nutné pro vytvoření zásilky.');
 
-        if (!$entity->baselinker_id) return $response->fail('Objednávka nemá Baselinker ID nutné pro vytvoření zásilky.');
+        $baselinker = Api::baselinker();
 
-        $baselinker = new Baselinker(['token' => config('env.BASELINKER_TOKEN')]);
-
-//        $response = $baselinker->courierShipments()->getCourierFields('one_by_allegro');
-        $response = $baselinker->courierShipments()->getCourierFields('allegrokurier');
-        dump($response->toArray());
-//        $response = $baselinker->courierShipments()->getCouriersList();
-//        $response = $baselinker->courierShipments()->getCourierAccounts('allegrokurier');
         $response = $baselinker->courierShipments()->createPackage($entity->baselinker_id, 'allegrokurier', $entity->allegro_one_fields, $entity->allegro_one_packages, 15703);
 
-        dd($response->toArray());
+        $trackingNumber = $response->getParameter('package_number');
 
-        return $response;
+        # pokud je 4. znak písmeno (O, S, I, ...), smazat ho
+        if (strlen($trackingNumber) > 3 && ctype_alpha($trackingNumber[3])) $trackingNumber = substr($trackingNumber, 0, 3) . substr($trackingNumber, 4);
+
+        $protoParcels = [
+            (object)[
+                'external_id' => $response->getParameter('package_id'),
+                'id'          => $trackingNumber,
+            ],
+        ];
+
+        $response = $baselinker->courierShipments()->getLabel('allegrokurier', [
+            'package_id'     => $protoParcels[0]->external_id,
+            'package_number' => $protoParcels[0]->id,
+        ]);
+
+        $labelBase64 = $response->getParameter('label');
+
+        $pdf = base64_decode($labelBase64, true);
+
+        if ($pdf === false) return $coreResponse->fail('Chyba při dekódování PDF štítku z Baselinkeru.');
+
+        $labelName = str_replace('*', '-', $protoParcels[0]->id) . '.pdf';
+
+        Storage::disk('private')->put('labels/' . $labelName, $pdf);
+
+        return $coreResponse->success($protoParcels);
     }
 
 
@@ -55,7 +77,7 @@ class AllegroOne
     {
         $response = new CoreResponse();
 
-        return $response->fail('Not implemented yet.'); // TODO: Implement getParcelStatus method
+        return $response->success(); // TODO: Implement getParcelStatus method once there are histories in Allegro API
     }
 
     public static function getCostFor(ParcelableContract $parcelable): float
@@ -68,16 +90,14 @@ class AllegroOne
     public static function getFieldsFor(ParcelableContract $parcelable): array
     {
         $collection = collect([
-//            'service'             => 'STANDARD',
-'courier'              => 'allegrokurier',
-'inpost_dispatch_type' => 'dispatch_order',
-'services_additional'  => null,
-'package_type'         => 'PACKAGE',
-'cod'                  => $parcelable->cod_for_parcel,
-'insurance'            => $parcelable->value_for_parcel,
-'package_description'  => $parcelable->text_for_parcel,
-'reference_number'     => $parcelable->id . ' ' . $parcelable->baselinker_id,
-//            'reference_number_2'  => $parcelable->baselinker_id,
+            'courier'             => self::COURIER_IDS[$parcelable->carrier_id ?: 'Allegro Kurier One'],
+            'services_additional' => null,
+            'package_type'        => 'PACKAGE',
+            'cod'                 => $parcelable->cod_for_parcel,
+            'insurance'           => $parcelable->value_for_parcel,
+            'package_description' => $parcelable->text_for_parcel,
+            'reference_number'    => $parcelable->id . ' ' . $parcelable->baselinker_id,
+            'currency_insurance'  => 'CZK',
         ]);
 
         return $collection->filter()->map(fn($v, $k) => ['id' => $k, 'value' => $v])->values()->toArray();

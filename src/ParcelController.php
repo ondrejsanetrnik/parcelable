@@ -40,7 +40,7 @@ class ParcelController extends Controller
     {
         $parcel = Parcel::findOrFail($id);
 
-        if (!Storage::disk('private')->exists('labels/' . $parcel->tracking_number . '.pdf')) {
+        if (!Storage::disk('private')->exists('labels/' . $parcel->label_name_pdf)) {
             if ($parcel->carrier == 'Zásilkovna')
                 Packeta::getLabel($parcel->tracking_number);
 //            elseif ($parcel->carrier == 'GLS')
@@ -50,7 +50,7 @@ class ParcelController extends Controller
             }
         }
 
-        return response()->download($parcel->label_path, $parcel->tracking_number . '.pdf', [], 'inline');
+        return response()->download($parcel->label_path, $parcel->label_name_pdf, [], 'inline');
     }
 
     /**
