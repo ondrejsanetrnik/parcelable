@@ -11,8 +11,9 @@ class AllegroOne
 {
 
     public const COURIER_IDS = [
-        'Allegro Kurier One'            => '0856a050-3310-44eb-8ad6-0a3151c1da58',
-        'Allegro Automaty Paczkowe One' => '3acc38bc-1db9-4238-b7f7-11c76ab6e905',
+        'Allegro Kurier One'               => '0856a050-3310-44eb-8ad6-0a3151c1da58',
+        'Allegro Automaty Paczkowe One'    => '3acc38bc-1db9-4238-b7f7-11c76ab6e905',
+        'Allegro Odbiór w Punkcie One pob' => '1cfe0620-9616-4d36-9222-a3f8ed84a513',
     ];
 
     /**
