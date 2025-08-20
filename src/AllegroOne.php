@@ -9,6 +9,24 @@ use Ondrejsanetrnik\Core\CoreResponse;
 
 class AllegroOne
 {
+
+    public const STATUSES = [
+        0  => 'Čeká na vyzvednutí kurýrem', # Unknown
+        1  => 'Čeká na vyzvednutí kurýrem', # Courier label created
+        2  => 'V přepravě', # Shipped
+        3  => 'Na cestě zpátky', # Not delivered
+        4  => 'Doručována', # Out for delivery
+        5  => 'Doručena', # Delivered
+        6  => 'Vrácena obchodu', # Return
+        7  => 'V přepravě', # Aviso
+        8  => 'Připravena k vyzvednutí', # Waiting at point
+        9  => 'V přepravě', # Lost
+        10 => 'Stornována', # Canceled
+        11 => 'V přepravě', # On the way
+        12 => 'V přepravě', # Exception (sorting error, other event, complaint)
+        13 => 'V přepravě', # Transferred abroad
+    ];
+
     /**
      * Creates a proto parcel object from given entity
      *
@@ -32,8 +50,7 @@ class AllegroOne
 
         $trackingNumber = $response->getParameter('package_number');
 
-        # pokud je 4. znak písmeno (O, S, I, ...), smazat ho
-        if (strlen($trackingNumber) > 3 && ctype_alpha($trackingNumber[3])) $trackingNumber = substr($trackingNumber, 0, 3) . substr($trackingNumber, 4);
+        if (self::isBarcode($trackingNumber)) $trackingNumber = self::trackingNumberFromBarcode($trackingNumber);
 
         $protoParcels = [
             (object)[
@@ -71,7 +88,9 @@ class AllegroOne
     {
         $response = new CoreResponse();
 
-        return $response->success(); // TODO: Implement getParcelStatus method once there are histories in Allegro API
+        $response->message = 'Zásilky z Allegro one jsou kontrolovány hromadně přes Baselinker API. Pro kontrolu stavu zásilky použijte call UpdateAllegroOneParcelStatuses.';
+
+        return $response->success();
     }
 
     public static function getCostFor(ParcelableContract $parcelable): float
@@ -110,5 +129,28 @@ class AllegroOne
                 'size_length' => $packaging->getLength(),
             ],
         ]);
+    }
+
+    /**
+     * Extracts the tracking number (the number without the order letter)
+     *
+     * @param string $barcode
+     * @return string
+     */
+    public static function trackingNumberFromBarcode(string $barcode): string
+    {
+        $rx = '~\b(?P<prefix>[A-Z0-9]{3})(?P<flag>[A-Z])(?P<number>\d{8})(?:\*(?P<piece>\d{3})(?P<total>\d{3}))?\b~';
+
+        if (preg_match($rx, $barcode, $m)) {
+            $barcode = $m[0];                             # "4RAM00168524*001001"
+            $tracking = $m['prefix'] . $m['number'];      # "4RA00168524" (4th letter removed, suffix dropped)
+
+            return $tracking;
+        } else return '';
+    }
+
+    public static function isBarcode(string $barcode): bool
+    {
+        return boolval(self::trackingNumberFromBarcode($barcode));
     }
 }

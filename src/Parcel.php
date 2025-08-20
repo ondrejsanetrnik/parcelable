@@ -171,7 +171,7 @@ class Parcel extends Entity
         $response = $this->carrierClass::getParcelStatus($this->tracking_number);
 
         # Persist if successful
-        if ($response->success) $this->update([
+        if ($response->success && $response->data) $this->update([
             'status'       => $response->data->status,
             'stored_until' => $response->data->storedUntil ?? null,
         ]);
