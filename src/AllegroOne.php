@@ -9,6 +9,22 @@ use Ondrejsanetrnik\Core\CoreResponse;
 
 class AllegroOne
 {
+    public const STATUSES = [
+        0  => 'Čeká na vyzvednutí kurýrem', # Unknown
+        1  => 'Čeká na vyzvednutí kurýrem', # Courier label created
+        2  => 'V přepravě', # Shipped
+        3  => 'Na cestě zpátky', # Not delivered
+        4  => 'Doručována', # Out for delivery
+        5  => 'Doručena', # Delivered
+        6  => 'Vrácena obchodu', # Return
+        7  => 'V přepravě', # Aviso
+        8  => 'Připravena k vyzvednutí', # Waiting at point
+        9  => 'V přepravě', # Lost
+        10 => 'Stornována', # Canceled
+        11 => 'V přepravě', # On the way
+        12 => 'V přepravě', # Exception (sorting error, other event, complaint)
+        13 => 'V přepravě', # Transferred abroad
+    ];
 
     public const COURIER_IDS = [
         'Allegro Kurier One'               => '0856a050-3310-44eb-8ad6-0a3151c1da58',
@@ -78,7 +94,9 @@ class AllegroOne
     {
         $response = new CoreResponse();
 
-        return $response->success(); // TODO: Implement getParcelStatus method once there are histories in Allegro API
+        $response->message = 'Zásilky z Allegro one jsou kontrolovány hromadně přes Baselinker API. Pro kontrolu stavu zásilky použijte call UpdateAllegroOneParcelStatuses.';
+
+        return $response->success();
     }
 
     public static function getCostFor(ParcelableContract $parcelable): float
