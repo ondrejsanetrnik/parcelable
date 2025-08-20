@@ -55,8 +55,7 @@ class AllegroOne
 
         $trackingNumber = $response->getParameter('package_number');
 
-        # pokud je 4. znak písmeno (O, S, I, ...), smazat ho
-        if (strlen($trackingNumber) > 3 && ctype_alpha($trackingNumber[3])) $trackingNumber = substr($trackingNumber, 0, 3) . substr($trackingNumber, 4);
+        if (self::isBarcode($trackingNumber)) $trackingNumber = self::trackingNumberFromBarcode($trackingNumber);
 
         $protoParcels = [
             (object)[
@@ -135,5 +134,28 @@ class AllegroOne
                 'size_length' => $packaging->getLength(),
             ],
         ]);
+    }
+
+    /**
+     * Extracts the tracking number (the number without the order letter)
+     *
+     * @param string $barcode
+     * @return string
+     */
+    public static function trackingNumberFromBarcode(string $barcode): string
+    {
+        $rx = '~\b(?P<prefix>[A-Z0-9]{3})(?P<flag>[A-Z])(?P<number>\d{8})(?:\*(?P<piece>\d{3})(?P<total>\d{3}))?\b~';
+
+        if (preg_match($rx, $barcode, $m)) {
+            $barcode = $m[0];                             # "4RAM00168524*001001"
+            $tracking = $m['prefix'] . $m['number'];      # "4RA00168524" (4th letter removed, suffix dropped)
+
+            return $tracking;
+        } else return '';
+    }
+
+    public static function isBarcode(string $barcode): bool
+    {
+        return boolval(self::trackingNumberFromBarcode($barcode));
     }
 }
