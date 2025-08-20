@@ -9,6 +9,7 @@ use Ondrejsanetrnik\Core\CoreResponse;
 
 class AllegroOne
 {
+
     public const STATUSES = [
         0  => 'Čeká na vyzvednutí kurýrem', # Unknown
         1  => 'Čeká na vyzvednutí kurýrem', # Courier label created
@@ -24,12 +25,6 @@ class AllegroOne
         11 => 'V přepravě', # On the way
         12 => 'V přepravě', # Exception (sorting error, other event, complaint)
         13 => 'V přepravě', # Transferred abroad
-    ];
-
-    public const COURIER_IDS = [
-        'Allegro Kurier One'               => '0856a050-3310-44eb-8ad6-0a3151c1da58',
-        'Allegro Automaty Paczkowe One'    => '3acc38bc-1db9-4238-b7f7-11c76ab6e905',
-        'Allegro Odbiór w Punkcie One pob' => '1cfe0620-9616-4d36-9222-a3f8ed84a513',
     ];
 
     /**
@@ -108,7 +103,7 @@ class AllegroOne
     public static function getFieldsFor(ParcelableContract $parcelable): array
     {
         $collection = collect([
-            'courier'             => self::COURIER_IDS[$parcelable->carrier_id ?: 'Allegro Kurier One'],
+            'courier'             => AllegroOneCourierIds::COURIER_IDS[$parcelable->carrier_id ?: 'Allegro Kurier One'],
             'services_additional' => null,
             'package_type'        => 'PACKAGE',
             'cod'                 => number_format($parcelable->cod_for_parcel, 2, '.', ''),
