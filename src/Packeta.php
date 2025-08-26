@@ -7,11 +7,13 @@ use Exception;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Ondrejsanetrnik\Core\CoreResponse;
+use Ondrejsanetrnik\Parcelable\enums\CarrierId;
 use SoapClient;
 use SoapFault;
 
 /**
  * @method static packetStatus(int $parcelNumber)
+ * @method static packetTracking(int $parcelNumber)
  * @method static createPacketClaimWithPassword(array $array)
  * @method static packetLabelPdf($id, string $string, int $int)
  * @method static createPacket(array $array)
@@ -77,19 +79,26 @@ class Packeta
             $parcelNumber = intval(ltrim($parcelNumber, 'Zz'));
         }
 
-        $response = self::packetStatus($parcelNumber);
+        $response = self::packetTracking($parcelNumber);
 
         if ($response->success) {
-            $status = self::STATUS_MAP[$response->data->codeText] ?? null;
+            $lastStatusObject = end($response->data->record);
 
-            if ($status === null) {
+            $lastStatusObject->status = self::STATUS_MAP[$lastStatusObject->codeText] ?? null;
+
+            if ($lastStatusObject->status === null) {
                 Log::channel('separated')->warning('Packeta status not found', [
-                    'code'         => $response->data->codeText,
+                    'code'         => $lastStatusObject->codeText,
                     'parcelNumber' => $parcelNumber,
                 ]);
             }
 
-            $response->data->status = $status;
+            $lastStatusObject->external_tracking_number = collect($response->data->record)
+                ->pluck('externalTrackingCode')
+                ->filter()
+                ->first() ?: null;
+
+            $response->data = $lastStatusObject;
         }
 
         return $response;
@@ -186,18 +195,18 @@ class Packeta
                 99 => 72,
             ],
             'PL' => [
-                null  => [
+                null                     => [
                     5  => 65,
                     99 => 128,
                 ],
-                3060  => [ # InPost Paczkomaty
-                           5  => 145,
-                           10 => 175,
-                           99 => 185,
+                CarrierId::INPOST->value => [ # InPost Paczkomaty
+                                              5  => 145,
+                                              10 => 175,
+                                              99 => 185,
                 ],
-                14052 => [ # Polská Pošta PP
-                           10 => 110,
-                           99 => 170,
+                14052                    => [ # Polská Pošta PP
+                                              10 => 110,
+                                              99 => 170,
                 ],
             ],
             'HU' => [

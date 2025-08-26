@@ -172,8 +172,9 @@ class Parcel extends Entity
 
         # Persist if successful
         if ($response->success && $response->data) $this->update([
-            'status'       => $response->data->status,
-            'stored_until' => $response->data->storedUntil ?? null,
+            'status'                   => $response->data->status,
+            'stored_until'             => $response->data->storedUntil ?? null,
+            'external_tracking_number' => $response->data->external_tracking_number ?? null,
         ]);
 
         return $response;
