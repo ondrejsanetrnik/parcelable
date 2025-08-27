@@ -82,7 +82,7 @@ class Packeta
         $response = self::packetTracking($parcelNumber);
 
         if ($response->success) {
-            $lastStatusObject = end($response->data->record);
+            $lastStatusObject = is_array($response->data->record) ? end($response->data->record) : $response->data->record;
 
             $lastStatusObject->status = self::STATUS_MAP[$lastStatusObject->codeText] ?? null;
 
