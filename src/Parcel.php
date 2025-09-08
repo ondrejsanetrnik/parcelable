@@ -93,7 +93,7 @@ class Parcel extends Entity
 
     public function getLabelUrlAttribute(): string
     {
-        return route('label', $this->id);
+        return route('label', $this->id, false);
     }
 
     public function getCarrierClassAttribute(): string

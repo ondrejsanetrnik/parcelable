@@ -26,7 +26,7 @@ class ParcelController extends Controller
             'parcelable_type' => null,
         ]);
 
-        return redirect()->back()->with('success', 'Balíček byl odejmut. Je možné ho najít mezi <a href="' . route('parcelsIndex') . '">nepřipárovanými balíčky</a>');
+        return redirect()->back()->with('success', 'Balíček byl odejmut. Je možné ho najít mezi <a href="' . route('parcelsIndex', [], false) . '">nepřipárovanými balíčky</a>');
     }
 
     /**
