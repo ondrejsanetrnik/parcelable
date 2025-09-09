@@ -139,6 +139,9 @@ class AllegroOne
      */
     public static function trackingNumberFromBarcode(string $barcode): string
     {
+        if (str_starts_with($barcode, 'A00') && strlen($barcode) == 10) return $barcode; # A002MH8633 - new format?
+        if (str_starts_with($barcode, '4RA') && strlen($barcode) == 11) return $barcode; # 4RA00179561 - new format 2??
+
         $rx = '~\b(?P<prefix>[A-Z0-9]{3})(?P<flag>[A-Z])(?P<number>\d{8})(?:\*(?P<piece>\d{3})(?P<total>\d{3}))?\b~';
 
         if (preg_match($rx, $barcode, $m)) {
