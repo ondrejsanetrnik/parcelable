@@ -46,7 +46,11 @@ class AllegroOne
 
         $baselinker = Api::baselinker();
 
-        $response = $baselinker->courierShipments()->createPackage($entity->baselinker_id, 'allegrokurier', $entity->allegro_one_fields, $entity->allegro_one_packages, 15703);
+        try {
+            $response = $baselinker->courierShipments()->createPackage($entity->baselinker_id, 'allegrokurier', $entity->allegro_one_fields, $entity->allegro_one_packages, 15703);
+        } catch (\Throwable $e) {
+            return $coreResponse->fail('Chyba při komunikaci s Baselinker API: ' . $e->getMessage());
+        }
 
         $trackingNumber = $response->getParameter('package_number');
 
