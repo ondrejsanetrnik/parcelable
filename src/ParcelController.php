@@ -42,7 +42,7 @@ class ParcelController extends Controller
 
         if (!Storage::disk('private')->exists('labels/' . $parcel->label_name_pdf)) {
             if ($parcel->carrier == 'Zásilkovna')
-                Packeta::getLabel($parcel->tracking_number);
+                Packeta::getLabel($parcel->tracking_number, (int)$parcel->parcelable?->carrier_id);
 //            elseif ($parcel->carrier == 'GLS')
 //                Gls::printLabels(Gls::generateJson($par));
             else {

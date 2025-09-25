@@ -18,6 +18,8 @@ use SoapFault;
  * @method static packetLabelPdf($id, string $string, int $int)
  * @method static createPacket(array $array)
  * @method static packetAttributesValid(array $array)
+ * @method static packetCourierNumberV2(int $id)
+ * @method static packetCourierLabelPdf(int $id, $externalCarrierId)
  */
 class Packeta
 {
@@ -128,7 +130,9 @@ class Packeta
                     if ($response->success) {
                         # Get and save the label
                         $protoParcel = $response->data;
-                        self::getLabel($protoParcel->id);
+
+                        self::getLabel($protoParcel->id, (int)$entity->carrier_id);
+
                         $protoParcels[] = $protoParcel;
                     }
                     break;
@@ -166,10 +170,20 @@ class Packeta
         return $response;
     }
 
-    public static function getLabel(int $id): void
+    public static function getLabel(int $id, ?int $carrierId = null): void
     {
-        $response = self::packetLabelPdf($id, config('parcelable.PACKETA_LABEL_FORMAT'), 0);
-        Storage::disk('private')->put('labels/' . $id . '.pdf', $response->data);
+        if (in_array($carrierId, CarrierId::getAllowedIdsForDirectLabelPrinting())) {
+            # Label is provided by the external carrier
+            $externalCarrierId = self::packetCourierNumberV2($id)->data->courierNumber;
+            $response = self::packetCourierLabelPdf($id, $externalCarrierId);
+        } else {
+            # Label is provided by Packeta
+            $response = self::packetLabelPdf($id, config('parcelable.PACKETA_LABEL_FORMAT'), 0);
+        }
+
+        if ($response?->data !== null) {
+            Storage::disk('private')->put('labels/' . $id . '.pdf', $response->data);
+        }
     }
 
 
@@ -265,5 +279,15 @@ class Packeta
         if ($parcelable->carrier_id) $tollSurcharge = $dieselSurcharge = 0; # No toll surcharge for external carriers
 
         return round($baseCost + $dieselSurcharge + $tollSurcharge + $codSurcharge, 2);
+    }
+
+    public static function isBarcode(string $barcode): bool
+    {
+        $regexes = [
+            '^Z\d{10}$', # Standard Packeta barcode
+            '^[56]\d{23}$', # InPost Paczkomaty
+        ];
+
+        return preg_match('/' . implode('|', $regexes) . '/i', $barcode) === 1;
     }
 }
