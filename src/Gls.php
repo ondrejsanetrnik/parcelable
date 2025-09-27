@@ -311,10 +311,10 @@ class Gls
 
             $statuses = collect($response->data->ParcelStatusList);
 
-            foreach ($statuses as $statusObject) {
-                if (!array_key_exists($statusObject->StatusDescription, self::STATUS_MAP))
-                    Log::warning('GLS status not recognized: ' . $statusObject->StatusDescription);
-            }
+//            foreach ($statuses as $statusObject) {
+//                if (!array_key_exists($statusObject->StatusDescription, self::STATUS_MAP))
+//                    Log::warning('GLS status not recognized: ' . $statusObject->StatusDescription);
+//            }
 
             $currentStatusDescription = $statuses[0]?->StatusDescription;
             $statusMap = self::STATUS_MAP;
