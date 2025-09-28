@@ -4,6 +4,7 @@ namespace Ondrejsanetrnik\Parcelable;
 
 use App\Models\Entity;
 use EloquentFilter\Filterable;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Storage;
@@ -53,9 +54,9 @@ class Parcel extends Entity
     ];
 
     public const CARRIER_CLASS = [
-        'GLS'         => 'Ondrejsanetrnik\Parcelable\Gls',
-        'Zásilkovna'  => 'Ondrejsanetrnik\Parcelable\Packeta',
-        'Balíkovna'   => 'Ondrejsanetrnik\Parcelable\Balikovna',
+        'GLS' => 'Ondrejsanetrnik\Parcelable\Gls',
+        'Zásilkovna' => 'Ondrejsanetrnik\Parcelable\Packeta',
+        'Balíkovna' => 'Ondrejsanetrnik\Parcelable\Balikovna',
         'Allegro One' => 'Ondrejsanetrnik\Parcelable\AllegroOne',
     ];
 
@@ -73,6 +74,12 @@ class Parcel extends Entity
     public function parcelable(): MorphTo
     {
         return $this->morphTo();
+    }
+
+    public function order(): BelongsTo
+    {
+        return $this->belongsTo('App\Order', 'parcelable_id')
+            ->where('parcelable_type', 'App\Order');
     }
 
     public function getTrackingUrlAttribute(): string
@@ -98,6 +105,8 @@ class Parcel extends Entity
 
     public function getCarrierClassAttribute(): string
     {
+        if ($this->carrier == 'Balíkovna' && $this->order?->aukro_id)
+            return 'Ondrejsanetrnik\Parcelable\BalikovnaAukro';
         return self::CARRIER_CLASS[$this->carrier];
     }
 
@@ -144,13 +153,13 @@ class Parcel extends Entity
             foreach ($response->data as $protoParcel) {
                 $parcel = Parcel::create([
                     'tracking_number' => $protoParcel->id,
-                    'carrier'         => $entity->carrierName,
-                    'name'            => $entity->name,
-                    'cod'             => ceil($entity->cod_in_currency / ($entity->parcel_count ?: 1)),
-                    'password'        => $protoParcel->password ?? null,
-                    'external_id'     => $protoParcel->external_id ?? null,
-                    'type'            => $type,
-                    'status'          => 'Čeká na vyzvednutí kurýrem',
+                    'carrier' => $entity->carrierName,
+                    'name' => $entity->name,
+                    'cod' => ceil($entity->cod_in_currency / ($entity->parcel_count ?: 1)),
+                    'password' => $protoParcel->password ?? null,
+                    'external_id' => $protoParcel->external_id ?? null,
+                    'type' => $type,
+                    'status' => 'Čeká na vyzvednutí kurýrem',
                 ]);
                 $parcels[] = $parcel;
             }
@@ -172,8 +181,8 @@ class Parcel extends Entity
 
         # Persist if successful
         if ($response->success && $response->data) $this->update([
-            'status'                   => $response->data->status,
-            'stored_until'             => $response->data->storedUntil ?? null,
+            'status' => $response->data->status,
+            'stored_until' => $response->data->storedUntil ?? null,
             'external_tracking_number' => $response->data->external_tracking_number ?? null,
         ]);
 
