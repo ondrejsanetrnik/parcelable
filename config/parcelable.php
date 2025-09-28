@@ -93,4 +93,14 @@ return [
     'GLS_COD_COSTS_FOREIGN'       => 24,
     'GLS_WEIGHT_MULTIPLIER'       => 1.6,
     'GLS_COD_CARD_PAYMENT'        => 0.002,
+
+
+    'CUT_OFF_TIMES' => [
+        'GENERAL'     => '12:00',
+        'GLS'         => '12:00',
+        'Zásilkovna'  => '12:00',
+        'Balíkovna'   => '12:00',
+        'Allegro One' => '12:00',
+        ''            => '15:00',
+    ],
 ];
