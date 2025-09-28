@@ -31,6 +31,8 @@ enum CarrierId: int
         return [
             self::PL_INPOST->value,
             self::PL_POCZTA_POLSKA->value,
+            self::HU_FOXPOST_BOX->value,
+            self::DE_HERMES_PP->value,
         ];
     }
 }

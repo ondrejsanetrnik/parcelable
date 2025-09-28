@@ -209,7 +209,7 @@ class Packeta
                 99 => 72,
             ],
             'PL' => [
-                null                     => [
+                null                        => [
                     5  => 65,
                     99 => 128,
                 ],
@@ -218,9 +218,9 @@ class Packeta
                                                  10 => 175,
                                                  99 => 185,
                 ],
-                14052                    => [ # Polská Pošta PP
-                                              10 => 110,
-                                              99 => 170,
+                14052                       => [ # Polská Pošta PP
+                                                 10 => 110,
+                                                 99 => 170,
                 ],
             ],
             'HU' => [
@@ -286,6 +286,9 @@ class Packeta
         $regexes = [
             '^Z\d{10}$', # Standard Packeta barcode
             '^[56]\d{23}$', # InPost Paczkomaty
+            '^PX\d{10}$', # Poczta Polska
+            '^CLFOX\d{15}$', # HU FoxPost Box
+            '^H\d{19}$', # DE Hermes PP
         ];
 
         return preg_match('/' . implode('|', $regexes) . '/i', $barcode) === 1;
