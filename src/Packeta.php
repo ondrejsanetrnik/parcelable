@@ -213,10 +213,10 @@ class Packeta
                     5  => 65,
                     99 => 128,
                 ],
-                CarrierId::INPOST->value => [ # InPost Paczkomaty
-                                              5  => 145,
-                                              10 => 175,
-                                              99 => 185,
+                CarrierId::PL_INPOST->value => [ # InPost Paczkomaty
+                                                 5  => 145,
+                                                 10 => 175,
+                                                 99 => 185,
                 ],
                 14052                    => [ # Polská Pošta PP
                                               10 => 110,
