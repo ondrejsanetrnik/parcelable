@@ -48,8 +48,8 @@ trait Parcelable
                 $method = method_exists($this, 'createParcelableEvent') ? 'createParcelableEvent' : 'createEvent';
                 $this->$method(
                     [
-                        'type'  => 'packetSend',
-                        'data'  => $parcel->tracking_number,
+                        'type' => 'packetSend',
+                        'data' => $parcel->tracking_number,
                         'title' => 'Zásilka vytvořena u <b>' . $this->carrier_name . '</b> pod číslem <b>' . $parcel->tracking_number . '</b>',
                     ]
                 );
@@ -84,7 +84,10 @@ trait Parcelable
             abort(501, 'Carrier name is not set for ' . $this->model_name . ' ' . $this->id);
         }
 
-        return Parcel::CARRIER_CLASS[$this->carrier_name];
+        if ($carrierName == 'Balíkovna' && $this->aukro_id)
+            return 'Ondrejsanetrnik\Parcelable\BalikovnaAukro';
+
+        return Parcel::CARRIER_CLASS[$carrierName];
     }
 
     public function getTrackingNumberAttribute()
@@ -121,13 +124,13 @@ trait Parcelable
         ) {
             $parcel = Parcel::firstOrCreate([
                 'tracking_number' => $trackingNumber,
-                'carrier'         => $this->carrier_name,
+                'carrier' => $this->carrier_name,
             ], [
-                'status'       => $this->getRawOriginal('parcel_status'),
-                'type'         => $this->model_name == 'order' ? 'parcel' : 'claim',
-                'name'         => $this->name,
+                'status' => $this->getRawOriginal('parcel_status'),
+                'type' => $this->model_name == 'order' ? 'parcel' : 'claim',
+                'name' => $this->name,
                 'stored_until' => $this->getRawOriginal('stored_until'),
-                'cod'          => $this->payment == 'Dobírka' ? $this->total : null,
+                'cod' => $this->payment == 'Dobírka' ? $this->total : null,
             ]);
 
             $parcel->unsetEventDispatcher();
@@ -187,17 +190,17 @@ trait Parcelable
         return match ($this->biggest_format) {
             'BIG' => [
                 'length' => 400,
-                'width'  => 300,
+                'width' => 300,
                 'height' => 175 + $itemCount * 25,
             ],
             'LP' => [
                 'length' => 398,
-                'width'  => 329,
+                'width' => 329,
                 'height' => 30 + $itemCount * 10,
             ],
             'CD' => [
                 'length' => 196,
-                'width'  => 142,
+                'width' => 142,
                 'height' => 2 + $itemCount * 10,
             ],
             default => null,
@@ -247,23 +250,23 @@ trait Parcelable
     public function getPacketaParcelAttributesAttribute(): array
     {
         return [
-            'number'             => $this->id,
-            'name'               => $this->first_name,
-            'surname'            => $this->last_name,
-            'email'              => $this->email,
-            'phone'              => $this->phone,
-            'street'             => $this->street,
-            'houseNumber'        => $this->house_number,
-            'city'               => $this->city,
-            'zip'                => substr_replace($this->postal_code ?? '', ' ', 3, 0),
-            'addressId'          => $this->address_id,
+            'number' => $this->id,
+            'name' => $this->first_name,
+            'surname' => $this->last_name,
+            'email' => $this->email,
+            'phone' => $this->phone,
+            'street' => $this->street,
+            'houseNumber' => $this->house_number,
+            'city' => $this->city,
+            'zip' => substr_replace($this->postal_code ?? '', ' ', 3, 0),
+            'addressId' => $this->address_id,
             'carrierPickupPoint' => $this->carrier_pickup_point,
-            'currency'           => $this->national_currency,
-            'size'               => $this->size_for_external_carrier,
-            'cod'                => $this->cod_for_parcel,
-            'value'              => $this->value_for_parcel,
-            'weight'             => min(10, $this->weight / 0.5 ?: 1),
-            'eshop'              => $this->eshop,
+            'currency' => $this->national_currency,
+            'size' => $this->size_for_external_carrier,
+            'cod' => $this->cod_for_parcel,
+            'value' => $this->value_for_parcel,
+            'weight' => min(10, $this->weight / 0.5 ?: 1),
+            'eshop' => $this->eshop,
         ];
     }
 
@@ -275,8 +278,8 @@ trait Parcelable
 
                 if (!$response->success) {
                     Obstacle::firstOrCreate([
-                        'type'     => 'parcel',
-                        'message'  => $response->message,
+                        'type' => 'parcel',
+                        'message' => $response->message,
                         'order_id' => $this->id,
                     ], [
                         'state' => 'danger',
