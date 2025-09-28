@@ -76,10 +76,11 @@ class Parcel extends Entity
         return $this->morphTo();
     }
 
-    public function order(): BelongsTo
+    public function getOrderAttribute()
     {
-        return $this->belongsTo('App\Order', 'parcelable_id')
-            ->where('parcelable_type', 'App\Order');
+        return $this->parcelable_type == 'App\Order'
+            ? $this->parcelable
+            : null;
     }
 
     public function getTrackingUrlAttribute(): string
