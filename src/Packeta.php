@@ -281,6 +281,12 @@ class Packeta
         return round($baseCost + $dieselSurcharge + $tollSurcharge + $codSurcharge, 2);
     }
 
+    /**
+     * Parcel::whereHas('parcelable', fn($q)=>$q->whereCarrierId(Ondrejsanetrnik\Parcelable\enums\CarrierId::LV_OMNIVA_BOX->value))->whereNotNull('external_tracking_number')->pluck('external_tracking_number')
+     *
+     * @param string $barcode
+     * @return bool
+     */
     public static function isBarcode(string $barcode): bool
     {
         $regexes = [
@@ -291,7 +297,7 @@ class Packeta
             '^H\d{19}$', # DE Hermes PP
             '^3S[A-Z]{3}\d{10}$', # NL DHL Parcel
             '^(?:PB|PN)ZDE\d{8}$', # HU Hungarian Post
-            '^\d{5}[A-Z]\d{6}$', // ES MRW
+            '^\d{5}[A-Z]\d{6}$', # ES MRW
         ];
 
         return preg_match('/' . implode('|', $regexes) . '/i', $barcode) === 1;
