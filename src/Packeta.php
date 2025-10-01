@@ -289,6 +289,9 @@ class Packeta
             '^PX\d{10}$', # Poczta Polska
             '^CLFOX\d{15}$', # HU FoxPost Box
             '^H\d{19}$', # DE Hermes PP
+            '^3S[A-Z]{3}\d{10}$', # NL DHL Parcel
+            '^(?:PB|PN)ZDE\d{8}$', # HU Hungarian Post
+            '^\d{5}[A-Z]\d{6}$', // ES MRW
         ];
 
         return preg_match('/' . implode('|', $regexes) . '/i', $barcode) === 1;

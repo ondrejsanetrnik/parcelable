@@ -33,6 +33,11 @@ enum CarrierId: int
             self::PL_POCZTA_POLSKA->value,
             self::HU_FOXPOST_BOX->value,
             self::DE_HERMES_PP->value,
+            self::NL_DHL_PP->value,
+            self::HU_HUNGARIAN_POST_PP->value,
+            self::HU_HUNGARIAN_POST_BOX->value,
+            self::ES_MRW_PP->value,
+            //            self::LV_OMNIVA_BOX->value,
         ];
     }
 }
