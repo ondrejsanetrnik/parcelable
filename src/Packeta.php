@@ -131,7 +131,7 @@ class Packeta
                         # Get and save the label
                         $protoParcel = $response->data;
 
-                        self::getLabel($protoParcel->id, (int)$entity->carrier_id);
+                        self::getLabel($protoParcel->id, $entity->carrier_id_inferred);
 
                         $protoParcels[] = $protoParcel;
                     }
