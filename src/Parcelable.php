@@ -262,7 +262,10 @@ trait Parcelable
             'street'             => $this->street,
             'houseNumber'        => $this->house_number,
             'city'               => $this->city,
-            'zip'                => substr_replace($this->postal_code ?? '', ' ', 3, 0),
+            'zip'                => in_array($this->country, [
+                'CZ',
+                'SK',
+            ]) ? substr_replace($this->postal_code ?? '', ' ', 3, 0) : $this->postal_code,
             'addressId'          => $this->address_id,
             'carrierPickupPoint' => $this->carrier_pickup_point,
             'currency'           => $this->national_currency,
