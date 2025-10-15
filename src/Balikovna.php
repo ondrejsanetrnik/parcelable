@@ -118,7 +118,6 @@ class Balikovna
 
         curl_close($ch);
         $balikovnaObject = json_decode($balikovnaResponse);
-
         # Compile faults from all endpoints into one collection
         foreach ($faultArrays as $key) {
             $potentialFaults = collect($balikovnaObject->$key ?? []);
@@ -441,7 +440,7 @@ class Balikovna
             'recordID' => strval($entity->id), // internal ID
             'insuredValue' => $entity->total * 2, // insurance, double the price of goods
             'note' => $entity->note ?? '', // internal note for the parcel
-            'notePrint' => $entity->id ?? '', // for the label
+            'notePrint' => "" . $entity->id ?? '', // for the label
         ];
 
 //        if ($entity->parcel_count > 1) {
@@ -486,7 +485,6 @@ class Balikovna
                 'parcelAddress' => $parcelAddress,
             ],
         ];
-
         // If multi-part parcel, add multipart data
 
 //        if ($entity->parcel_count > 1) {
@@ -690,7 +688,6 @@ class Balikovna
             ],
             //v odpovědi printingDataResult	 	Data štítku v base64 kódování
         ];
-
         // Send the request and return the response
         return static::getResponse('parcelPrinting', $data);
     }
