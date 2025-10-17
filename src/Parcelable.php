@@ -283,7 +283,7 @@ trait Parcelable
             case 'Zásilkovna':
                 $response = Packeta::packetAttributesValid($this->packeta_parcel_attributes);
 
-                if (!$response->success) {
+                if (!$response->success && $response->message !== 'Bad Gateway') {
                     Obstacle::firstOrCreate([
                         'type'     => 'parcel',
                         'message'  => $response->message,
