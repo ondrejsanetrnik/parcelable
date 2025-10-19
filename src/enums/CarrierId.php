@@ -29,6 +29,12 @@ enum CarrierId: int
     case LT_LITHUANIAN_POST_BOX = 18809;
     case EE_OMNIVA_BOX = 5062;
     case SE_POST_NORD_PP = 4826;
+    case BG_BOXNOW_BOX = 33777;
+    case RO_FAN_BOX = 32428;
+    case SI_POST_BOX = 19517;
+    case BG_SPEEDY_PP = 4017;
+    case IT_ITALIAN_POST_PUNTO_POSTE_PP = 32528;
+    case IT_ITALIAN_POST_PP = 29660;
 
     public static function getAllowedIdsForDirectLabelPrinting(): array
     {
