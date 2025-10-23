@@ -131,7 +131,7 @@ class Packeta
                         # Get and save the label
                         $protoParcel = $response->data;
 
-                        self::getLabel($protoParcel->id, (int)$entity->carrier_id);
+                        self::getLabel($protoParcel->id, $entity->carrier_id_inferred);
 
                         $protoParcels[] = $protoParcel;
                     }
@@ -282,6 +282,7 @@ class Packeta
     }
 
     /**
+     * Order::whereDelivery('Zásilkovna')->where('created_at', '>', now()->subMonth())->whereNotNull('carrier_id')->pluck('carrier_id')->filter()->countBy()->sortDesc()->shuffle()->mapWithKeys(fn($v, $k)=>[Ondrejsanetrnik\Parcelable\enums\CarrierId::from($k)->name => $v])
      * Parcel::whereHas('parcelable', fn($q)=>$q->whereCarrierId(Ondrejsanetrnik\Parcelable\enums\CarrierId::LV_OMNIVA_BOX->value))->whereNotNull('external_tracking_number')->pluck('external_tracking_number')
      *
      * @param string $barcode

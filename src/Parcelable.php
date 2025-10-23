@@ -7,6 +7,7 @@ use Exception;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Ondrejsanetrnik\Core\CoreResponse;
+use Ondrejsanetrnik\Parcelable\enums\CarrierId;
 
 trait Parcelable
 {
@@ -48,8 +49,8 @@ trait Parcelable
                 $method = method_exists($this, 'createParcelableEvent') ? 'createParcelableEvent' : 'createEvent';
                 $this->$method(
                     [
-                        'type' => 'packetSend',
-                        'data' => $parcel->tracking_number,
+                        'type'  => 'packetSend',
+                        'data'  => $parcel->tracking_number,
                         'title' => 'Zásilka vytvořena u <b>' . $this->carrier_name . '</b> pod číslem <b>' . $parcel->tracking_number . '</b>',
                     ]
                 );
@@ -67,7 +68,7 @@ trait Parcelable
     public function getCarrierNameAttribute(): ?string
     {
         return match ($this->delivery) {
-            'PACKETA', 'Packeta', 'Zásilkovna' => 'Zásilkovna',
+            'PACKETA', 'Packeta', 'Zásilkovna', 'Zásilkovna na adresu' => 'Zásilkovna',
             'GlsParcelShop', 'GLS ParcelShop', 'Zaslat na adresu', 'GLS' => 'GLS',
             'Balíkovna', 'BalikovnaNaAdresu' => 'Balíkovna',
             'Allegro One' => 'Allegro One',
@@ -124,13 +125,13 @@ trait Parcelable
         ) {
             $parcel = Parcel::firstOrCreate([
                 'tracking_number' => $trackingNumber,
-                'carrier' => $this->carrier_name,
+                'carrier'         => $this->carrier_name,
             ], [
-                'status' => $this->getRawOriginal('parcel_status'),
-                'type' => $this->model_name == 'order' ? 'parcel' : 'claim',
-                'name' => $this->name,
+                'status'       => $this->getRawOriginal('parcel_status'),
+                'type'         => $this->model_name == 'order' ? 'parcel' : 'claim',
+                'name'         => $this->name,
                 'stored_until' => $this->getRawOriginal('stored_until'),
-                'cod' => $this->payment == 'Dobírka' ? $this->total : null,
+                'cod'          => $this->payment == 'Dobírka' ? $this->total : null,
             ]);
 
             $parcel->unsetEventDispatcher();
@@ -145,8 +146,11 @@ trait Parcelable
     public function getHomeDeliveryAddressIdAttribute(): int
     {
         return match ($this->country) {
-            'SK' => 131,
-            default => 106,
+            'SK' => CarrierId::SK_PACKETA_HD->value,
+            'CZ' => CarrierId::CZ_PACKETA_HD->value,
+            'HU' => CarrierId::HU_HUNGARIAN_POST_HD->value,
+            'DE' => CarrierId::DE_HERMES_HD->value,
+            default => abort(500, 'Home delivery not supported in ' . $this->country),
         };
     }
 
@@ -162,7 +166,7 @@ trait Parcelable
 
     public function getAddressIdAttribute(): ?string
     {
-        if ($this->delivery == 'Zásilkovna') {
+        if ($this->carrier_name == 'Zásilkovna') {
             if ($this->is_zasilkovna_on_address) return $this->home_delivery_address_id;
             elseif ($this->is_external_pickup_point) return $this->carrier_id;
             else return $this->packeta_id;
@@ -190,17 +194,17 @@ trait Parcelable
         return match ($this->biggest_format) {
             'BIG' => [
                 'length' => 400,
-                'width' => 300,
+                'width'  => 300,
                 'height' => 175 + $itemCount * 25,
             ],
             'LP' => [
                 'length' => 398,
-                'width' => 329,
+                'width'  => 329,
                 'height' => 30 + $itemCount * 10,
             ],
             'CD' => [
                 'length' => 196,
-                'width' => 142,
+                'width'  => 142,
                 'height' => 2 + $itemCount * 10,
             ],
             default => null,
@@ -250,23 +254,26 @@ trait Parcelable
     public function getPacketaParcelAttributesAttribute(): array
     {
         return [
-            'number' => $this->id,
-            'name' => $this->first_name,
-            'surname' => $this->last_name,
-            'email' => $this->email,
-            'phone' => $this->phone,
-            'street' => $this->street,
-            'houseNumber' => $this->house_number,
-            'city' => $this->city,
-            'zip' => substr_replace($this->postal_code ?? '', ' ', 3, 0),
-            'addressId' => $this->address_id,
+            'number'             => $this->id,
+            'name'               => $this->first_name,
+            'surname'            => $this->last_name,
+            'email'              => $this->email,
+            'phone'              => $this->phone,
+            'street'             => $this->street,
+            'houseNumber'        => $this->house_number,
+            'city'               => $this->city,
+            'zip'                => in_array($this->country, [
+                'CZ',
+                'SK',
+            ]) ? substr_replace($this->postal_code ?? '', ' ', 3, 0) : $this->postal_code,
+            'addressId'          => $this->address_id,
             'carrierPickupPoint' => $this->carrier_pickup_point,
-            'currency' => $this->national_currency,
-            'size' => $this->size_for_external_carrier,
-            'cod' => $this->cod_for_parcel,
-            'value' => $this->value_for_parcel,
-            'weight' => min(10, $this->weight / 0.5 ?: 1),
-            'eshop' => $this->eshop,
+            'currency'           => $this->national_currency,
+            'size'               => $this->size_for_external_carrier,
+            'cod'                => $this->cod_for_parcel,
+            'value'              => $this->value_for_parcel,
+            'weight'             => min(10, $this->weight / 0.5 ?: 1),
+            'eshop'              => $this->eshop,
         ];
     }
 
@@ -276,10 +283,10 @@ trait Parcelable
             case 'Zásilkovna':
                 $response = Packeta::packetAttributesValid($this->packeta_parcel_attributes);
 
-                if (!$response->success) {
+                if (!$response->success && $response->message !== 'Bad Gateway') {
                     Obstacle::firstOrCreate([
-                        'type' => 'parcel',
-                        'message' => $response->message,
+                        'type'     => 'parcel',
+                        'message'  => $response->message,
                         'order_id' => $this->id,
                     ], [
                         'state' => 'danger',
@@ -307,5 +314,12 @@ trait Parcelable
     public function getAllegroOnePackagesAttribute(): array
     {
         return AllegroOne::getPackagesFor($this);
+    }
+
+    public function getCarrierIdInferredAttribute(): ?int
+    {
+        $hdId = $this->delivery === 'Zásilkovna na adresu' ? $this->home_delivery_address_id : null;
+
+        return (int)$this->carrier_id ?: $hdId;
     }
 }
