@@ -32,7 +32,7 @@ class ParcelObserver
             try {
                 $parcel->parcelable?->fire('updated', 'parcelChange');
             } catch (\Throwable $e) {
-                Log::channel('separated')->warning('Parcelable failed to fire parcelChange for ' . $parcel->parcelable->model_name_identifier);
+                Log::warning('Parcelable failed to fire parcelChange for ' . $parcel->parcelable->model_name_identifier . ' : ' . $e->getMessage() . ' ' . $e->getTraceAsString());
             }
         }
     }
