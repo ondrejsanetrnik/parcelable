@@ -182,11 +182,11 @@ class Gls
 
         $serviceList = [];
 
-        if ($entity->gls_packeta) {
+        if ($entity->gls_packeta || $entity->glsPacketa) {
             $serviceList[] = [
                 'Code'         => 'PSD',
                 'PSDParameter' => [
-                    'StringValue' => $entity->gls_packeta,
+                    'StringValue' => $entity->gls_packeta ?? $entity->glsPacketa,
                 ],
             ];
         } elseif ($entity->fds_available) {
