@@ -8,6 +8,7 @@ namespace Ondrejsanetrnik\Parcelable\enums;
 enum CarrierId: int
 {
 
+    case AT_AUSTRIAN_POST_HD = 80;
     case CZ_PACKETA_HD = 106;
     case SK_PACKETA_HD = 131;
     case PL_INPOST = 3060;

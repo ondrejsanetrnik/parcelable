@@ -148,6 +148,7 @@ trait Parcelable
         return match ($this->country) {
             'SK' => CarrierId::SK_PACKETA_HD->value,
             'CZ' => CarrierId::CZ_PACKETA_HD->value,
+            'AT' => CarrierId::AT_AUSTRIAN_POST_HD->value,
             'HU' => CarrierId::HU_HUNGARIAN_POST_HD->value,
             'DE' => CarrierId::DE_HERMES_HD->value,
             default => abort(500, 'Home delivery not supported in ' . $this->country),
