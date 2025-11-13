@@ -4,6 +4,8 @@ namespace Ondrejsanetrnik\Parcelable\enums;
 
 /**
  * https://pickup-point.api.packeta.com/v5/d3b8401799d472fd/carrier/json?lang=cs
+ * Order::whereIn('delivery', ['Zásilkovna', 'Zásilkovna na adresu'])->pluck('carrier_id')->filter()->countBy()->sortDesc()->mapWithKeys(fn($count, $id) => [Ondrejsanetrnik\Parcelable\enums\CarrierId::tryFrom($id)?->name ?? $id => $count])
+ *
  */
 enum CarrierId: int
 {
@@ -36,6 +38,15 @@ enum CarrierId: int
     case BG_SPEEDY_PP = 4017;
     case IT_ITALIAN_POST_PUNTO_POSTE_PP = 32528;
     case IT_ITALIAN_POST_PP = 29660;
+    case IT_BARTOLINI_PP = 9104;
+    case LT_VENIPAK_BOX = 25992;
+    case FI_POST_NORD_PP = 4828;
+    case BG_ECONT_PP = 19471;
+    case PT_MRW_PP = 4656;
+    case GR_ELTA_COURIER_PP = 27955;
+    case SI_POST_PP = 19516;
+    case FI_MATKAHUOLTO_BOX = 26987;
+
 
     public static function getAllowedIdsForDirectLabelPrinting(): array
     {
@@ -50,7 +61,15 @@ enum CarrierId: int
             self::DE_HERMES_HD->value,
             self::NL_DHL_PP->value,
             self::ES_MRW_PP->value,
-            //            self::LV_OMNIVA_BOX->value,
+
+            # TODO add those below to the Packeta::isBarcode() fn
+            self::LV_OMNIVA_BOX->value,
+            self::LT_OMNIVA_BOX->value,
+            self::RO_SAMEDAY_BOX->value,
+            self::LT_LITHUANIAN_POST_BOX->value,
+            self::BE_BELGIAN_POST_PP->value,
+            self::GR_BOXNOW_BOX->value,
+            self::IT_ITALIAN_POST_PUNTO_POSTE_PP->value,
         ];
     }
 }
