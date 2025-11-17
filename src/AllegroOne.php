@@ -156,8 +156,10 @@ class AllegroOne
         } else return '';
     }
 
-    public static function isBarcode(string $barcode): bool
+    public static function isBarcode(?string $barcode = null): bool
     {
+        if (!$barcode) return false;
+
         return boolval(self::trackingNumberFromBarcode($barcode));
     }
 }

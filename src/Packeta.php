@@ -285,11 +285,13 @@ class Packeta
      * Order::whereDelivery('Zásilkovna')->where('created_at', '>', now()->subMonth())->whereNotNull('carrier_id')->pluck('carrier_id')->filter()->countBy()->sortDesc()->shuffle()->mapWithKeys(fn($v, $k)=>[Ondrejsanetrnik\Parcelable\enums\CarrierId::from($k)->name => $v])
      * Parcel::whereHas('parcelable', fn($q)=>$q->whereCarrierId(Ondrejsanetrnik\Parcelable\enums\CarrierId::LV_OMNIVA_BOX->value))->whereNotNull('external_tracking_number')->pluck('external_tracking_number')
      *
-     * @param string $barcode
+     * @param string|null $barcode
      * @return bool
      */
-    public static function isBarcode(string $barcode): bool
+    public static function isBarcode(?string $barcode = null): bool
     {
+        if (!$barcode) return false;
+
         $regexes = [
             '^Z\d{10}$', # Standard Packeta barcode
             '^[56]\d{23}$', # InPost Paczkomaty
