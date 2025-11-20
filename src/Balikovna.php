@@ -231,56 +231,95 @@ class Balikovna
             $parcelIds = [$parcelIds];
         }
 
-        // Ensure the number of parcel IDs does not exceed 10
+        // Max 10 parcels per request (API requirement)
         if (count($parcelIds) > 10) {
             return (new CoreResponse())->fail('Cannot request status for more than 10 parcels at a time.');
         }
 
-        // Prepare the request data
         $requestData = [
-            'parcelIds' => $parcelIds, // "parcelIds" used in the request
+            'parcelIds' => $parcelIds,
             'language'  => $language,
         ];
 
-        // Get the response from the API
         $response = static::getResponse('parcelStatus', $requestData);
-        // Process the response if successful
-        if ($response->success) {
-            // Prepare the response data with filtered statuses and storedUntil
-            $processedData = collect($response->data->detail)->map(function ($parcelDetail) {
-                // Get the last 3 parcelStatuses
-                $statuses = collect($parcelDetail->parcelStatuses);
 
-                // Initialize status text as an empty string
-                $statusText = '';
-
-                // Loop through the last 3 statuses and check for specific keywords
-                foreach ($statuses as $status) {
-                    foreach (static::STATUS_MAP as $keyword => $mappedStatus) {
-                        if (strpos($status->text, $keyword) !== false) {
-                            $statusText = $mappedStatus;
-                        }
-                    }
-                }
-
-                // Return an object with the mapped status text and storedUntil
-                return (object)[
-                    'status'      => $statusText, // Concatenate the filtered status texts
-                    'storedUntil' => $parcelDetail->depositTo ?? null, // Use timeDeposit or null
-                ];
-            });
-
-            // Set the processed data to the response object
-            if (isset($response->data) && property_exists($response->data, 'status')) {
-                $response->data->originalStatus = $response->data->status;
-            } else {
-                $response->data->originalStatus = null;
-            }
-            $response->data->status = $processedData->pluck('status')->first();
-            $response->data->storedUntil = $processedData->pluck('storedUntil')->first();
+        if (!$response->success) {
+            return $response; // already failed (curl error, API faults, etc.)
         }
 
-// Return the processed response
+        $data = $response->data; // This can be object OR array in production
+
+        // ──────────────────────────────────────────────────────────────
+        // Safely extract the "detail" field regardless of object/array
+        // ──────────────────────────────────────────────────────────────
+        $detail = [];
+        if (is_object($data)) {
+            $detail = $data->detail ?? [];
+        } elseif (is_array($data)) {
+            $detail = $data['detail'] ?? [];
+        }
+
+        // If for some reason there's no detail, fail gracefully
+        if (empty($detail) || !is_iterable($detail)) {
+            \Log::warning('Balíkovna parcelStatus returned no detail', [
+                'parcelIds'    => $parcelIds,
+                'raw_response' => $data,
+            ]);
+            return $response->fail('No parcel details returned from Balíkovna API.');
+        }
+
+        // Convert to collection and make sure every item is an object
+        $processedData = collect($detail)->map(function ($parcelDetail) {
+            $parcelDetail = (object)$parcelDetail; // force object from now on
+
+            $statuses = collect($parcelDetail->parcelStatuses ?? []);
+
+            $statusText = '';
+
+            foreach ($statuses as $status) {
+                $status = (object)$status;
+
+                foreach (static::STATUS_MAP as $keyword => $mappedStatus) {
+                    if (str_contains($status->text ?? '', $keyword)) {
+                        $statusText = $mappedStatus;
+                        // Remove the `break 2` if you want the LAST matching keyword
+                        // Keep it if you want the FIRST one (current behavior)
+                        break 2;
+                    }
+                }
+            }
+
+            return (object)[
+                'status'      => $statusText,
+                'storedUntil' => $parcelDetail->depositTo ?? null,
+            ];
+        });
+
+        // ──────────────────────────────────────────────────────────────
+        // Attach processed values back to response->data
+        // ──────────────────────────────────────────────────────────────
+        $firstItem = $processedData->first();
+
+        // Preserve original overall status (if API returned one)
+        $originalOverallStatus = null;
+        if (is_object($data) && property_exists($data, 'status')) {
+            $originalOverallStatus = $data->status;
+        } elseif (is_array($data) && isset($data['status'])) {
+            $originalOverallStatus = $data['status'];
+        }
+
+        // Normalize response->data to object (your CoreResponse probably expects object)
+        $response->data = (object)[
+            'originalStatus' => $originalOverallStatus,
+            'status'         => $firstItem->status ?? '',
+            'storedUntil'    => $firstItem->storedUntil ?? null,
+            'detail'         => $processedData->toArray(), // optional: keep processed details
+            // you can keep any other original fields if needed:
+            // ... (array) $data,
+        ];
+
+        $response->success = true;
+
         return $response;
     }
 
