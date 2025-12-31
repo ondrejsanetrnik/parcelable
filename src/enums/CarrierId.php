@@ -70,6 +70,10 @@ enum CarrierId: int
             self::BE_BELGIAN_POST_PP->value,
             self::GR_BOXNOW_BOX->value,
             self::IT_ITALIAN_POST_PUNTO_POSTE_PP->value,
+            self::FR_COLLISIMO_PP->value,
+            self::RO_FAN_BOX->value,
+            self::BG_SPEEDY_PP->value,
+            self::AT_AUSTRIAN_POST_HD->value,
         ];
     }
 }
