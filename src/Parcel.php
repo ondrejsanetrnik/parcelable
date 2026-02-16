@@ -58,6 +58,7 @@ class Parcel extends Entity
         'Zásilkovna' => 'Ondrejsanetrnik\Parcelable\Packeta',
         'Balíkovna' => 'Ondrejsanetrnik\Parcelable\Balikovna',
         'Allegro One' => 'Ondrejsanetrnik\Parcelable\AllegroOne',
+        'DPD' => 'Ondrejsanetrnik\Parcelable\Dpd',
     ];
 
     /**
@@ -95,6 +96,7 @@ class Parcel extends Entity
                 } . '?match=' . $this->tracking_number,
             'Balíkovna' => 'https://www.balikovna.cz/cs/sledovat-balik/-/balik/' . $this->tracking_number,
             'Allegro One' => 'http://trace.wedo.cz/index.php?action=eSearch&orderNumber=' . $this->tracking_number_short,
+            'DPD' => 'https://www.dpdgroup.com/cz/mydpd/my-parcels/search?lang=' . $language . '&parcelNumber=' . $this->tracking_number,
             default => 'https://tracking.packeta.com/' . $language . '/?id=' . $this->tracking_number,
         };
     }

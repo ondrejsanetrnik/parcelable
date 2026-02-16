@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Log;
 use Ondrejsanetrnik\Parcelable\AllegroOne;
 use Ondrejsanetrnik\Parcelable\Parcel;
 
-class UpdateAllegroOneParcelStatuses
+class UpdateBaselinkerParcelStatuses
 {
     /**
      * Gets all Allegro parcels on the way and updates the statuses in bulk through the Baselinker API
@@ -17,7 +17,7 @@ class UpdateAllegroOneParcelStatuses
     public function __invoke(): void
     {
         Parcel::query()
-            ->whereCarrier('Allegro One')
+            ->whereIn('carrier', ['Allegro One', 'DPD'])
             ->whereIn('status', Parcel::ON_THE_WAY_STATUSES)
             ->chunk(100, function ($parcels) {
                 sleep(3);
@@ -37,7 +37,7 @@ class UpdateAllegroOneParcelStatuses
                         }
                     }
                 } else {
-                    Log::warning('Chyba při aktualizaci stavů zásilek Allegro One');
+                    Log::warning('Chyba při aktualizaci stavů zásilek z Baselinkeru');
                 }
             });
     }
