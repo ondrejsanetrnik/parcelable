@@ -2,7 +2,7 @@
 
 namespace Ondrejsanetrnik\Parcelable;
 
-use App\Http\Controllers\ReturnController;
+use App\Enums\EventName;
 use Illuminate\Support\Facades\Log;
 
 class ParcelObserver
@@ -49,12 +49,12 @@ class ParcelObserver
             return;
         }
 
-        if ($order->hasEvents([ReturnController::EVENT_PARCEL_RETURNING_EMAIL_SENT])) {
+        if ($order->hasEvents([EventName::ZasilkaSeVraciEmailOdeslan])) {
             return;
         }
 
         try {
-            $order->createEvent(ReturnController::EVENT_PARCEL_RETURNING_EMAIL_SENT, 'parcelChange');
+            $order->createEvent(EventName::ZasilkaSeVraciEmailOdeslan);
             $order->mailSelf('ParcelReturning');
         } catch (\Throwable $e) {
             Log::warning('Failed to send ParcelReturning email for order ' . $order->id . ': ' . $e->getMessage());
