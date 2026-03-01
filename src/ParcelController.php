@@ -4,7 +4,6 @@ namespace Ondrejsanetrnik\Parcelable;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -15,9 +14,7 @@ class ParcelController extends Controller
      * Disassociates the label from the current order
      *
      * @param int $id
-     *
      * @return RedirectResponse
-     *
      */
     public function remove(int $id): RedirectResponse
     {
@@ -34,17 +31,20 @@ class ParcelController extends Controller
      *
      * @param int $id
      * @return RedirectResponse | BinaryFileResponse
-     *
      */
     public function label(int $id): RedirectResponse|BinaryFileResponse
     {
         $parcel = Parcel::findOrFail($id);
 
+        if ($parcel->status === 'Vrácena obchodu') {
+            return redirect()->back()->with('error', 'Štítek zásilky ve stavu Vrácena obchodu nelze tisknout. Podej nový balík.');
+        }
+
         if (!Storage::disk('private')->exists('labels/' . $parcel->label_name_pdf)) {
             if ($parcel->carrier == 'Zásilkovna')
                 Packeta::getLabel($parcel->tracking_number, $parcel->parcelable?->carrier_id_inferred);
-//            elseif ($parcel->carrier == 'GLS')
-//                Gls::printLabels(Gls::generateJson($par));
+            //            elseif ($parcel->carrier == 'GLS')
+            //                Gls::printLabels(Gls::generateJson($par));
             else {
                 return redirect()->back()->with('error', 'Soubor nenalezen');
             }
@@ -57,7 +57,6 @@ class ParcelController extends Controller
      * Shows an index of unpaired parcels
      *
      * @return View
-     *
      */
     public function index(): View
     {
