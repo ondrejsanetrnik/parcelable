@@ -10,6 +10,11 @@ use Ondrejsanetrnik\Core\CoreResponse;
 trait BaselinkerDeliverable
 {
     /**
+     * Max length for text on label. DPD/Baselinker API returns TEXT_ON_LABEL_TOO_LONG when exceeded.
+     */
+    protected const TEXT_ON_LABEL_MAX_LENGTH = 35;
+
+    /**
      * Creates a proto parcel object from given entity
      *
      * @param Entity $entity
@@ -90,6 +95,16 @@ trait BaselinkerDeliverable
 
     public static function getFieldsFor(ParcelableContract $parcelable): array
     {
+        $packageDescription = $parcelable->text_for_parcel ?? '';
+        if (mb_strlen($packageDescription) > self::TEXT_ON_LABEL_MAX_LENGTH) {
+            $packageDescription = mb_substr($packageDescription, 0, self::TEXT_ON_LABEL_MAX_LENGTH);
+        }
+
+        $referenceNumber = $parcelable->id . ' ' . $parcelable->baselinker_id;
+        if (mb_strlen($referenceNumber) > self::TEXT_ON_LABEL_MAX_LENGTH) {
+            $referenceNumber = mb_substr($referenceNumber, 0, self::TEXT_ON_LABEL_MAX_LENGTH);
+        }
+
         $collection = collect([
 //            'courier'             => AllegroOneCourierIds::COURIER_IDS[$parcelable->carrier_id ?: 'Allegro Kurier One'] ?? 'detect',
             'courier'             => 'detect',
@@ -97,8 +112,8 @@ trait BaselinkerDeliverable
             'package_type'        => 'PACKAGE',
             'cod'                 => number_format($parcelable->cod_for_parcel, 2, '.', ''),
             'insurance'           => number_format(ceil($parcelable->value_for_parcel), 2, '.', ''),
-            'package_description' => $parcelable->text_for_parcel,
-            'reference_number'    => $parcelable->id . ' ' . $parcelable->baselinker_id,
+            'package_description' => $packageDescription,
+            'reference_number'    => $referenceNumber,
             'currency_insurance'  => $parcelable->currency,
         ]);
 
@@ -109,13 +124,19 @@ trait BaselinkerDeliverable
     {
         $packaging = $parcelable->recommended_packaging;
 
-        //TODO implement logic for multiple packages
+        $textOnLabel = $parcelable->id . ' ' . $parcelable->baselinker_id;
+        if (mb_strlen($textOnLabel) > self::TEXT_ON_LABEL_MAX_LENGTH) {
+            $textOnLabel = mb_substr($textOnLabel, 0, self::TEXT_ON_LABEL_MAX_LENGTH);
+        }
+
+        # TODO implement logic for multiple packages
         return array_filter([
             [
                 'weight'      => $parcelable->weight,
                 'size_width'  => $packaging->getWidth(),
                 'size_height' => $packaging->getHeight(),
                 'size_length' => $packaging->getLength(),
+                'textOnLabel' => $textOnLabel,
             ],
         ]);
     }
