@@ -10,23 +10,16 @@ use Ondrejsanetrnik\Core\CoreResponse;
 trait BaselinkerDeliverable
 {
     /**
-     * Max length for text on label. DPD/Baselinker API returns TEXT_ON_LABEL_TOO_LONG when exceeded.
-     */
-    protected const TEXT_ON_LABEL_MAX_LENGTH = 35;
-
-    /**
      * Creates a proto parcel object from given entity
      *
      * @param Entity $entity
      * @param string $type = ''
      * @return CoreResponse
-     *
      */
     public static function createFrom(
         Entity $entity,
         string $type = ''
-    ): CoreResponse
-    {
+    ): CoreResponse {
         $coreResponse = new CoreResponse();
 
         if (!$entity->baselinker_id) return $coreResponse->fail('Objednávka nemá Baselinker ID nutné pro vytvoření zásilky.');
@@ -70,7 +63,6 @@ trait BaselinkerDeliverable
         return $coreResponse->success($protoParcels);
     }
 
-
     /**
      * Checks the parcel status in Allegro API
      *
@@ -88,56 +80,45 @@ trait BaselinkerDeliverable
 
     public static function getCostFor(ParcelableContract $parcelable): float
     {
-        //TODO: Implement cost calculation logic
+        // TODO: Implement cost calculation logic
 
         return 60.0; // Example fixed cost
     }
 
+    /**
+     * Fields for createPackage per Base support: courier, insurance, package_type, cod (with decimal).
+     * Optional extras (reference_number, package_description) omitted to avoid label length errors.
+     */
     public static function getFieldsFor(ParcelableContract $parcelable): array
     {
-        $packageDescription = $parcelable->text_for_parcel ?? '';
-        if (mb_strlen($packageDescription) > self::TEXT_ON_LABEL_MAX_LENGTH) {
-            $packageDescription = mb_substr($packageDescription, 0, self::TEXT_ON_LABEL_MAX_LENGTH);
+        $fields = [
+            ['id' => 'courier', 'value' => 'detect'],
+            ['id' => 'insurance', 'value' => number_format(ceil($parcelable->value_for_parcel), 2, '.', '')],
+            ['id' => 'package_type', 'value' => 'PACKAGE'],
+        ];
+
+        $cod = number_format($parcelable->cod_for_parcel, 2, '.', '');
+        if ((float)$cod > 0) {
+            $fields[] = ['id' => 'cod', 'value' => $cod];
         }
 
-        $referenceNumber = $parcelable->id . ' ' . $parcelable->baselinker_id;
-        if (mb_strlen($referenceNumber) > self::TEXT_ON_LABEL_MAX_LENGTH) {
-            $referenceNumber = mb_substr($referenceNumber, 0, self::TEXT_ON_LABEL_MAX_LENGTH);
-        }
-
-        $collection = collect([
-//            'courier'             => AllegroOneCourierIds::COURIER_IDS[$parcelable->carrier_id ?: 'Allegro Kurier One'] ?? 'detect',
-            'courier'             => 'detect',
-            'services_additional' => null,
-            'package_type'        => 'PACKAGE',
-            'cod'                 => number_format($parcelable->cod_for_parcel, 2, '.', ''),
-            'insurance'           => number_format(ceil($parcelable->value_for_parcel), 2, '.', ''),
-            'package_description' => $packageDescription,
-            'reference_number'    => $referenceNumber,
-            'currency_insurance'  => $parcelable->currency,
-        ]);
-
-        return $collection->filter()->map(fn($v, $k) => ['id' => $k, 'value' => $v])->values()->toArray();
+        return $fields;
     }
 
+    /**
+     * Package dimensions per Base sample: length, height, width, weight (no textOnLabel).
+     */
     public static function getPackagesFor(ParcelableContract $parcelable): array
     {
         $packaging = $parcelable->recommended_packaging;
 
-        $textOnLabel = $parcelable->id . ' ' . $parcelable->baselinker_id;
-        if (mb_strlen($textOnLabel) > self::TEXT_ON_LABEL_MAX_LENGTH) {
-            $textOnLabel = mb_substr($textOnLabel, 0, self::TEXT_ON_LABEL_MAX_LENGTH);
-        }
-
-        # TODO implement logic for multiple packages
-        return array_filter([
+        return [
             [
-                'weight'      => $parcelable->weight,
-                'size_width'  => $packaging->getWidth(),
-                'size_height' => $packaging->getHeight(),
-                'size_length' => $packaging->getLength(),
-                'textOnLabel' => $textOnLabel,
+                'length' => $packaging->getLength(),
+                'height' => $packaging->getHeight(),
+                'width'  => $packaging->getWidth(),
+                'weight' => $parcelable->weight,
             ],
-        ]);
+        ];
     }
 }
