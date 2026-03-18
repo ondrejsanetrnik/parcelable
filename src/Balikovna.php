@@ -428,7 +428,7 @@ class Balikovna
         $disk = 'private';
 
         // Debugging: Log the disk and file name being used
-        Log::info("Saving label to disk: {$disk}, file name: {$fileName}.pdf");
+//        Log::info("Saving label to disk: {$disk}, file name: {$fileName}.pdf");
 
         // Save the decoded label to a file
         $saved = Storage::disk($disk)->put('labels/' . $fileName . '.pdf', $decodedLabel);
@@ -438,7 +438,7 @@ class Balikovna
             Log::error("Failed to save label as PDF: {$fileName}.pdf");
             throw new \Exception("Failed to save label as PDF: {$fileName}.pdf");
         } else {
-            Log::info("Label saved successfully as: labels/{$fileName}.pdf");
+//            Log::info("Label saved successfully as: labels/{$fileName}.pdf");
         }
     }
 
