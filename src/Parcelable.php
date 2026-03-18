@@ -72,6 +72,7 @@ trait Parcelable
             'GlsParcelShop', 'GLS ParcelShop', 'Zaslat na adresu', 'GLS' => 'GLS',
             'Balíkovna', 'BalikovnaNaAdresu' => 'Balíkovna',
             'Allegro One' => 'Allegro One',
+            'DPD' => 'DPD',
             default => null,
         };
     }

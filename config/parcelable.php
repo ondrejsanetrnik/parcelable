@@ -103,4 +103,9 @@ return [
         'Allegro One' => '12:00',
         ''            => '15:00',
     ],
+
+    # Send email when parcel status changes to "Na cestě zpátky"
+    # Requires the parcelable model to have hasEvents(), createEvent(), and mailSelf() methods
+    # and ReturnController::EVENT_PARCEL_RETURNING_EMAIL_SENT constant
+    'send_returning_email' => false,
 ];

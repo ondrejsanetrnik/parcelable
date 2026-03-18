@@ -174,8 +174,10 @@ class Packeta
     {
         if (in_array($carrierId, CarrierId::getAllowedIdsForDirectLabelPrinting())) {
             # Label is provided by the external carrier
-            $externalCarrierId = self::packetCourierNumberV2($id)->data->courierNumber;
-            $response = self::packetCourierLabelPdf($id, $externalCarrierId);
+            if ($externalCarrierData = self::packetCourierNumberV2($id)->data)
+                $response = self::packetCourierLabelPdf($id, $externalCarrierData->courierNumber);
+            else
+                $response = self::packetLabelPdf($id, config('parcelable.PACKETA_LABEL_FORMAT'), 0);
         } else {
             # Label is provided by Packeta
             $response = self::packetLabelPdf($id, config('parcelable.PACKETA_LABEL_FORMAT'), 0);
