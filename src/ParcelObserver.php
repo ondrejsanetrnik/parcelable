@@ -3,6 +3,8 @@
 namespace Ondrejsanetrnik\Parcelable;
 
 use App\Enums\EventName;
+use App\Models\User;
+use App\Services\SlackApi;
 use Illuminate\Support\Facades\Log;
 
 class ParcelObserver
@@ -32,7 +34,27 @@ class ParcelObserver
             try {
                 $parcel->parcelable?->fire('updated', 'parcelChange');
             } catch (\Throwable $e) {
-                Log::warning('Parcelable failed to fire parcelChange for ' . $parcel->parcelable->model_name_identifier . ' : ' . $e->getMessage() . ' ' . $e->getTraceAsString());
+                $identifier = $parcel->parcelable?->model_name_identifier ?? '?';
+                Log::warning('Parcelable failed to fire parcelChange for ' . $identifier . ' : ' . $e->getMessage() . ' ' . $e->getTraceAsString());
+
+                $country = $parcel->parcelable?->country ?? null;
+                if ($country !== 'CZ') {
+                    try {
+                        $slackId = User::find(1)?->slack_id;
+                        if ($slackId) {
+                            SlackApi::sendMessage(
+                                $slackId,
+                                "⚠️ Parcelable parcelChange selhalo: {$identifier}"
+                                    . ($country !== null ? " (země: {$country})" : '')
+                                    . "\n" . $e->getMessage()
+                            );
+                        }
+                    } catch (\Throwable $slackException) {
+                        Log::warning('Failed to send parcelChange Slack notification', [
+                            'error' => $slackException->getMessage(),
+                        ]);
+                    }
+                }
             }
         }
 
