@@ -72,8 +72,8 @@ trait Parcelable
             'GlsParcelShop', 'GLS ParcelShop', 'Zaslat na adresu', 'GLS' => 'GLS',
             'Balíkovna', 'BalikovnaNaAdresu' => 'Balíkovna',
             'Allegro One' => 'Allegro One',
-            'DPD' => 'DPD',
-            default => null,
+            'DPD'         => 'DPD',
+            default       => null,
         };
     }
 
@@ -86,10 +86,7 @@ trait Parcelable
             abort(501, 'Carrier name is not set for ' . $this->model_name . ' ' . $this->id);
         }
 
-        if ($carrierName == 'Balíkovna' && $this->aukro_id)
-            return 'Ondrejsanetrnik\Parcelable\BalikovnaAukro';
-
-        return Parcel::CARRIER_CLASS[$carrierName];
+        return CarrierClassResolver::resolve($carrierName, $this);
     }
 
     public function getTrackingNumberAttribute()
@@ -147,11 +144,11 @@ trait Parcelable
     public function getHomeDeliveryAddressIdAttribute(): int
     {
         return match ($this->country) {
-            'SK' => CarrierId::SK_PACKETA_HD->value,
-            'CZ' => CarrierId::CZ_PACKETA_HD->value,
-            'AT' => CarrierId::AT_AUSTRIAN_POST_HD->value,
-            'HU' => CarrierId::HU_HUNGARIAN_POST_HD->value,
-            'DE' => CarrierId::DE_HERMES_HD->value,
+            'SK'    => CarrierId::SK_PACKETA_HD->value,
+            'CZ'    => CarrierId::CZ_PACKETA_HD->value,
+            'AT'    => CarrierId::AT_AUSTRIAN_POST_HD->value,
+            'HU'    => CarrierId::HU_HUNGARIAN_POST_HD->value,
+            'DE'    => CarrierId::DE_HERMES_HD->value,
             default => abort(500, 'Home delivery not supported in ' . $this->country),
         };
     }
@@ -193,6 +190,7 @@ trait Parcelable
     public function getSizeForExternalCarrierAttribute(): ?array
     {
         $itemCount = $this->items?->count();
+
         return match ($this->biggest_format) {
             'BIG' => [
                 'length' => 400,
@@ -256,15 +254,15 @@ trait Parcelable
     public function getPacketaParcelAttributesAttribute(): array
     {
         return [
-            'number'             => $this->id,
-            'name'               => $this->first_name,
-            'surname'            => $this->last_name,
-            'email'              => $this->email,
-            'phone'              => $this->phone,
-            'street'             => $this->street,
-            'houseNumber'        => $this->house_number,
-            'city'               => $this->city,
-            'zip'                => in_array($this->country, [
+            'number'      => $this->id,
+            'name'        => $this->first_name,
+            'surname'     => $this->last_name,
+            'email'       => $this->email,
+            'phone'       => $this->phone,
+            'street'      => $this->street,
+            'houseNumber' => $this->house_number,
+            'city'        => $this->city,
+            'zip'         => in_array($this->country, [
                 'CZ',
                 'SK',
             ]) ? substr_replace($this->postal_code ?? '', ' ', 3, 0) : $this->postal_code,
