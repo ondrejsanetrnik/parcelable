@@ -180,7 +180,8 @@ class Dpd
 
         if ($entity->is_cod) {
             $currency = $entity->national_currency ?: 'CZK';
-            $amountCents = (int)round((float)$entity->cod_for_parcel * 100);
+            $parcelCount = max(1, (int)($entity->parcel_count ?: 1));
+            $amountCents = (int)round((float)$entity->cod_for_parcel * $parcelCount * 100);
             $services['cashOnDelivery'] = [
                 'amountCents' => $amountCents,
                 'currency'    => $currency,
@@ -239,7 +240,7 @@ class Dpd
         usort($events, fn($a, $b) => strcmp($b['createdAt'] ?? '', $a['createdAt'] ?? ''));
         $latest = $events[0];
         $desc = $latest['status']['description'] ?? '';
-        $code = $latest['status']['statusCode'] ?? '';
+        $code = (string)($latest['status']['statusCode'] ?? '');
 
         $mapped = self::STATUS_MAP[$desc] ?? null;
         if ($mapped === null && $code === '13') {
