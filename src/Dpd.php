@@ -69,7 +69,7 @@ class Dpd
                 return $coreResponse->fail('DPD nevrátilo číslo zásilky (parcelNumbers.main).');
             }
 
-            $labelResponse = self::http()->withHeaders([
+            $labelResponse = self::http()->replaceHeaders([
                 'Accept' => 'application/pdf',
             ])->post(self::baseUrl() . '/parcels/labels', [
                 'printType'       => 'PDF',
