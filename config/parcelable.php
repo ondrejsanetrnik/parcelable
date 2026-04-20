@@ -29,6 +29,17 @@ return [
     'BALIKOVNA_POST_CODE'       => env('BALIKOVNA_POST_CODE'),
     'BALIKOVNA_ID_CCK'          => env('BALIKOVNA_ID_CCK'),
 
+    'DPD_USE_TEST_ENV'     => env('DPD_USE_TEST_ENV', false),
+    'DPD_GEOAPI_BASE'      => env('DPD_GEOAPI_BASE', 'https://geoapi.dpd.cz/v1'),
+    'DPD_GEOAPI_BASE_TEST' => env('DPD_GEOAPI_BASE_TEST', 'https://geoapi-test.dpd.cz/v1'),
+    'DPD_API_KEY'          => env('DPD_API_KEY'),
+    'DPD_API_KEY_TEST'     => env('DPD_API_KEY_TEST'),
+    'DPD_CUSTOMER_ID'      => env('DPD_CUSTOMER_ID'),
+    'DPD_SENDER_IT4EM_ID'  => env('DPD_SENDER_IT4EM_ID'),
+    'DPD_LABEL_PAGE_SIZE'  => env('DPD_LABEL_PAGE_SIZE', 'A6'),
+    'DPD_LABELS_PER_PAGE'  => env('DPD_LABELS_PER_PAGE', 1),
+    'DPD_NOTIFICATION'     => env('DPD_NOTIFICATION', false),
+
     'GLS_PRICE_LIST' => [
         0 => [
             5  => 66.00,
@@ -93,7 +104,6 @@ return [
     'GLS_COD_COSTS_FOREIGN'       => 24,
     'GLS_WEIGHT_MULTIPLIER'       => 1.6,
     'GLS_COD_CARD_PAYMENT'        => 0.002,
-
 
     'CUT_OFF_TIMES' => [
         'GENERAL'     => '12:00',

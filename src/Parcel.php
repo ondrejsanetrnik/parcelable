@@ -4,7 +4,6 @@ namespace Ondrejsanetrnik\Parcelable;
 
 use App\Models\Entity;
 use EloquentFilter\Filterable;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Storage;
@@ -54,11 +53,11 @@ class Parcel extends Entity
     ];
 
     public const CARRIER_CLASS = [
-        'GLS' => 'Ondrejsanetrnik\Parcelable\Gls',
-        'Zásilkovna' => 'Ondrejsanetrnik\Parcelable\Packeta',
-        'Balíkovna' => 'Ondrejsanetrnik\Parcelable\Balikovna',
+        'GLS'         => 'Ondrejsanetrnik\Parcelable\Gls',
+        'Zásilkovna'  => 'Ondrejsanetrnik\Parcelable\Packeta',
+        'Balíkovna'   => 'Ondrejsanetrnik\Parcelable\Balikovna',
         'Allegro One' => 'Ondrejsanetrnik\Parcelable\AllegroOne',
-        'DPD' => 'Ondrejsanetrnik\Parcelable\Dpd',
+        'DPD'         => 'Ondrejsanetrnik\Parcelable\Dpd',
     ];
 
     /**
@@ -90,14 +89,14 @@ class Parcel extends Entity
 
         return match ($this->carrier) {
             'GLS' => match ($language) {
-                    'cs' => 'https://gls-group.eu/CZ/cs/sledovani-zasilek',
-                    'de' => 'https://www.gls-pakete.de/sendungsverfolgung',
-                    default => 'https://gls-group.eu/CZ/en/parcel-tracking',
-                } . '?match=' . $this->tracking_number,
-            'Balíkovna' => 'https://www.balikovna.cz/cs/sledovat-balik/-/balik/' . $this->tracking_number,
+                'cs'    => 'https://gls-group.eu/CZ/cs/sledovani-zasilek',
+                'de'    => 'https://www.gls-pakete.de/sendungsverfolgung',
+                default => 'https://gls-group.eu/CZ/en/parcel-tracking',
+            } . '?match=' . $this->tracking_number,
+            'Balíkovna'   => 'https://www.balikovna.cz/cs/sledovat-balik/-/balik/' . $this->tracking_number,
             'Allegro One' => 'http://trace.wedo.cz/index.php?action=eSearch&orderNumber=' . $this->tracking_number_short,
-            'DPD' => 'https://www.dpdgroup.com/cz/mydpd/my-parcels/search?lang=' . $language . '&parcelNumber=' . $this->tracking_number,
-            default => 'https://tracking.packeta.com/' . $language . '/?id=' . $this->tracking_number,
+            'DPD'         => 'https://www.dpdgroup.com/cz/mydpd/my-parcels/search?lang=' . $language . '&parcelNumber=' . $this->tracking_number,
+            default       => 'https://tracking.packeta.com/' . $language . '/?id=' . $this->tracking_number,
         };
     }
 
@@ -108,9 +107,7 @@ class Parcel extends Entity
 
     public function getCarrierClassAttribute(): string
     {
-        if ($this->carrier == 'Balíkovna' && $this->order?->aukro_id)
-            return 'Ondrejsanetrnik\Parcelable\BalikovnaAukro';
-        return self::CARRIER_CLASS[$this->carrier];
+        return CarrierClassResolver::resolve($this->carrier, $this->order);
     }
 
     public function getLabelNamePdfAttribute(): string
@@ -139,15 +136,13 @@ class Parcel extends Entity
      * @param Entity $entity
      * @param string $type = ''
      * @return CoreResponse
-     *
      */
     public static function createFrom(
         Entity $entity,
         string $type = ''
-    ): CoreResponse
-    {
-        //$order má is_zasilkovna_on_address set to true, delivery ji zůstává 'Zásilkovna'
-        //přepínat a upravovat to jde  😁
+    ): CoreResponse {
+        // $order má is_zasilkovna_on_address set to true, delivery ji zůstává 'Zásilkovna'
+        // přepínat a upravovat to jde  😁
         $type = $type ?: $entity->default_parcel_type;
         $response = $entity->carrierClass::createFrom($entity, $type);
         if ($response->success) {
@@ -156,13 +151,13 @@ class Parcel extends Entity
             foreach ($response->data as $protoParcel) {
                 $parcel = Parcel::create([
                     'tracking_number' => $protoParcel->id,
-                    'carrier' => $entity->carrierName,
-                    'name' => $entity->name,
-                    'cod' => ceil($entity->cod_in_currency / ($entity->parcel_count ?: 1)),
-                    'password' => $protoParcel->password ?? null,
-                    'external_id' => $protoParcel->external_id ?? null,
-                    'type' => $type,
-                    'status' => 'Čeká na vyzvednutí kurýrem',
+                    'carrier'         => $entity->carrierName,
+                    'name'            => $entity->name,
+                    'cod'             => ceil($entity->cod_in_currency / ($entity->parcel_count ?: 1)),
+                    'password'        => $protoParcel->password ?? null,
+                    'external_id'     => $protoParcel->external_id ?? null,
+                    'type'            => $type,
+                    'status'          => 'Čeká na vyzvednutí kurýrem',
                 ]);
                 $parcels[] = $parcel;
             }
@@ -184,8 +179,8 @@ class Parcel extends Entity
 
         # Persist if successful
         if ($response->success && $response->data) $this->update([
-            'status' => $response->data->status,
-            'stored_until' => $response->data->storedUntil ?? null,
+            'status'                   => $response->data->status,
+            'stored_until'             => $response->data->storedUntil ?? null,
             'external_tracking_number' => $response->data->external_tracking_number ?? null,
         ]);
 
