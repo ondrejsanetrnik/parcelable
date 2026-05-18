@@ -16,7 +16,11 @@ final class CarrierClassResolver
             return BalikovnaAukro::class;
         }
 
-        if ($carrierName === 'DPD' && ($context?->baselinker_id ?? null)) {
+        if (
+            $carrierName === 'DPD'
+            && ($context?->baselinker_id ?? null)
+            && ($context?->source ?? null) !== 'alza'
+        ) {
             return DpdAllegro::class;
         }
 

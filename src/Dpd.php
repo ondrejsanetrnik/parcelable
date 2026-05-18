@@ -194,7 +194,8 @@ class Dpd
             $services['pickupPoint'] = $pudo;
         }
 
-        if (config('parcelable.DPD_NOTIFICATION', false)) {
+        # GeoAPI rejects PickupPoint without Notification (InvalidServiceCombination).
+        if ($pudo !== '' || config('parcelable.DPD_NOTIFICATION', false)) {
             $services['notification'] = true;
         }
 
