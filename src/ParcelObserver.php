@@ -4,7 +4,6 @@ namespace Ondrejsanetrnik\Parcelable;
 
 use App\Enums\EventName;
 use App\Models\User;
-use App\Services\SlackApi;
 use Illuminate\Support\Facades\Log;
 
 class ParcelObserver
@@ -40,15 +39,11 @@ class ParcelObserver
                 $country = $parcel->parcelable?->country ?? null;
                 if ($country !== 'CZ') {
                     try {
-                        $slackId = User::find(1)?->slack_id;
-                        if ($slackId) {
-                            SlackApi::sendMessage(
-                                $slackId,
-                                "⚠️ Parcelable parcelChange selhalo: {$identifier}"
-                                    . ($country !== null ? " (země: {$country})" : '')
-                                    . "\n" . $e->getMessage()
-                            );
-                        }
+                        User::find(1)?->sendSlackMessage(
+                            "⚠️ Parcelable parcelChange selhalo: {$identifier}"
+                                . ($country !== null ? " (země: {$country})" : '')
+                                . "\n" . $e->getMessage()
+                        );
                     } catch (\Throwable $slackException) {
                         Log::warning('Failed to send parcelChange Slack notification', [
                             'error' => $slackException->getMessage(),

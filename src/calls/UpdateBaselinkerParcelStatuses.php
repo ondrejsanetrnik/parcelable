@@ -21,15 +21,25 @@ class UpdateBaselinkerParcelStatuses
             ->whereIn('status', Parcel::ON_THE_WAY_STATUSES)
             ->chunk(100, function ($parcels) {
                 sleep(3);
+                $packageIds = $parcels
+                    ->pluck('external_id')
+                    ->map(static fn($externalId) => is_numeric($externalId) ? (int)$externalId : null)
+                    ->filter(static fn($packageId) => $packageId !== null && $packageId > 0)
+                    ->values()
+                    ->all();
 
-                $response = Api::baselinker()->courierShipments()->getCourierPackagesStatusHistory($parcels->pluck('external_id')->toArray());
+                if ($packageIds === []) {
+                    return;
+                }
+
+                $response = Api::baselinker()->courierShipments()->getCourierPackagesStatusHistory($packageIds);
 
                 if ($response->getParameter('status') === 'SUCCESS') {
-                    $statuses = $response->getParameter('packages_history');
+                    $packagesHistory = $response->getParameter('packages_history');
                     foreach ($parcels as $parcel) {
-                        $statuses = $statuses[$parcel->external_id] ?? null;
-                        if ($statuses) {
-                            $status = AllegroOne::STATUSES[array_pop($statuses)['tracking_status']] ?? 'V přepravě';
+                        $parcelHistory = $packagesHistory[$parcel->external_id] ?? null;
+                        if ($parcelHistory) {
+                            $status = AllegroOne::STATUSES[array_pop($parcelHistory)['tracking_status']] ?? 'V přepravě';
                             $parcel->update([
                                 'status'     => $status,
                                 'updated_at' => now(),
