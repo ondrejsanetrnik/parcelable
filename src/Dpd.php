@@ -44,12 +44,14 @@ class Dpd
         $type = $type ?: $entity->default_parcel_type;
         if ($type === 'claim') return $coreResponse->fail('Reklamační zásilka DPD GeoAPI zatím není podporována.');
 
-        $customerId = config('parcelable.DPD_CUSTOMER_ID');
-        if (!$customerId) return $coreResponse->fail('Chybí konfigurace DPD_CUSTOMER_ID (viz GET /me v GeoAPI).');
+        $account = self::accountFor($entity);
+        if (!$account['customer_id']) {
+            return $coreResponse->fail('Chybí DPD účet pro eshop ' . ($entity->eshop ?? '?') . ' (config parcelable.DPD_ACCOUNTS).');
+        }
 
         $payload = [self::buildShipmentPayload($entity)];
 
-        $response = self::http()->post(self::baseUrl() . '/shipments', $payload);
+        $response = self::http($account)->post(self::baseUrl() . '/shipments', $payload);
 
         if ($response->failed()) {
             return $coreResponse->fail(self::formatHttpError('Vytvoření zásilky DPD', $response));
@@ -69,7 +71,7 @@ class Dpd
                 return $coreResponse->fail('DPD nevrátilo číslo zásilky (parcelNumbers.main).');
             }
 
-            $labelResponse = self::http()->withHeaders([
+            $labelResponse = self::http($account)->withHeaders([
                 'Accept' => 'application/pdf',
             ])->post(self::baseUrl() . '/parcels/labels', [
                 'printType'       => 'PDF',
@@ -102,11 +104,9 @@ class Dpd
         return $coreResponse->success($protoParcels);
     }
 
-    /**
-     * @return array<string, mixed>
-     */
     private static function buildShipmentPayload(Entity $entity): array
     {
+        $account = self::accountFor($entity);
         $parcelCount = max(1, (int)($entity->parcel_count ?: 1));
         $weightGrams = max(1, (int)round($entity->weight * 1000));
         $weightPerParcel = (int)max(1, round($weightGrams / $parcelCount));
@@ -140,13 +140,13 @@ class Dpd
         }
 
         $payload = [
-            'customer'     => ['id' => (int)config('parcelable.DPD_CUSTOMER_ID')],
+            'customer'     => ['id' => (int)$account['customer_id']],
             'shipmentType' => 'Standard',
             'references'   => [
                 'ref1' => (string)$entity->id,
             ],
             'sender' => [
-                'it4emId' => (int)config('parcelable.DPD_SENDER_IT4EM_ID'),
+                'it4emId' => $account['sender_it4em_id'],
             ],
             'receiver' => [
                 'info' => [
@@ -189,7 +189,9 @@ class Dpd
             ];
         }
 
-        $pudo = trim((string)($entity->packeta ?? ''));
+        # pickupPoint = výdejní místo (DPD služba 101). Pro doručení na adresu (327) nesmí být vyplněno.
+        $isDpdPickup = ($entity->delivery ?? '') === 'DPD Pickup';
+        $pudo = $isDpdPickup ? trim((string)($entity->packeta ?? '')) : '';
         if ($pudo !== '') {
             $services['pickupPoint'] = $pudo;
         }
@@ -216,13 +218,13 @@ class Dpd
         return strlen($c) === 2 ? $c : 'CZ';
     }
 
-    public static function getParcelStatus(int|string $parcelNumber): CoreResponse
+    public static function getParcelStatus(int|string $parcelNumber, Entity $entity): CoreResponse
     {
         $response = new CoreResponse();
 
         $parcelNumber = is_string($parcelNumber) ? preg_replace('/\s+/', '', $parcelNumber) : (string)$parcelNumber;
 
-        $http = self::http()->get(self::baseUrl() . '/parcels/' . rawurlencode($parcelNumber) . '/tracking');
+        $http = self::http(self::accountFor($entity))->get(self::baseUrl() . '/parcels/' . rawurlencode($parcelNumber) . '/tracking');
 
         if ($http->failed()) {
             return $response->fail(self::formatHttpError('Stav zásilky DPD', $http));
@@ -263,24 +265,30 @@ class Dpd
         return $response->success($statusObject);
     }
 
+    /**
+     * @return array{api_key: string, customer_id: string, sender_it4em_id: int}
+     */
+    private static function accountFor(Entity $entity): array
+    {
+        $raw = config('parcelable.DPD_ACCOUNTS')[(string)$entity->eshop] ?? [];
+        $test = (bool)config('parcelable.DPD_USE_TEST_ENV');
+
+        return [
+            'api_key'         => (string)($test ? ($raw['api_key_test'] ?? '') : ($raw['api_key'] ?? '')),
+            'customer_id'     => (string)($raw['customer_id'] ?? ''),
+            'sender_it4em_id' => (int)($raw['sender_it4em_id'] ?? 0),
+        ];
+    }
+
     private static function baseUrl(): string
     {
         return rtrim(config('parcelable.DPD_USE_TEST_ENV') ? config('parcelable.DPD_GEOAPI_BASE_TEST') : config('parcelable.DPD_GEOAPI_BASE'), '/');
     }
 
-    private static function apiKey(): string
-    {
-        if (config('parcelable.DPD_USE_TEST_ENV')) {
-            return (string)config('parcelable.DPD_API_KEY_TEST');
-        }
-
-        return (string)config('parcelable.DPD_API_KEY');
-    }
-
-    private static function http(): \Illuminate\Http\Client\PendingRequest
+    private static function http(array $account): \Illuminate\Http\Client\PendingRequest
     {
         return Http::withHeaders([
-            'x-api-key'    => self::apiKey(),
+            'x-api-key'    => $account['api_key'],
             'Content-Type' => 'application/json',
             'Accept'       => 'application/json',
         ])->timeout(120);
