@@ -175,7 +175,7 @@ class Parcel extends Entity
      */
     public function updateStatus(): CoreResponse
     {
-        $response = $this->carrier === 'DPD'
+        $response = $this->carrierClass === Dpd::class
             ? Dpd::getParcelStatus($this->tracking_number, $this->parcelable)
             : $this->carrierClass::getParcelStatus($this->tracking_number);
 
