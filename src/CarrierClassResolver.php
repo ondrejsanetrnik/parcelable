@@ -33,7 +33,7 @@ final class CarrierClassResolver
     {
         $delivery = (string)($context->delivery ?? '');
 
-        return ($context->country ?? '') === 'CZ'
+        return strtoupper(trim((string)($context->country ?? ''))) === 'CZ'
             && in_array($delivery, ['DPD', 'DPD Pickup'], true)
             && strcasecmp((string)($context->source ?? ''), 'allegro') !== 0
             && $delivery !== 'Allegro One';
