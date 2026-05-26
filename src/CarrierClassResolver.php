@@ -16,14 +16,26 @@ final class CarrierClassResolver
             return BalikovnaAukro::class;
         }
 
-        if (
-            $carrierName === 'DPD'
-            && ($context?->baselinker_id ?? null)
-            && ($context?->source ?? null) !== 'alza'
-        ) {
-            return DpdAllegro::class;
+        # Baselinker + DPD: vlastní GeoAPI (CZ) vs kurýr Allegro; Alza vždy {@see Dpd} přes výchozí mapování.
+        if ($carrierName === 'DPD' && ($context?->baselinker_id ?? null) && !self::isAlzaSource($context)) {
+            return self::usesOwnCzDpdContract($context) ? Dpd::class : DpdAllegro::class;
         }
 
         return Parcel::CARRIER_CLASS[$carrierName];
+    }
+
+    private static function isAlzaSource(?object $context): bool
+    {
+        return strcasecmp((string)($context?->source ?? ''), 'alza') === 0;
+    }
+
+    private static function usesOwnCzDpdContract(?object $context): bool
+    {
+        $delivery = (string)($context->delivery ?? '');
+
+        return strtoupper(trim((string)($context->country ?? ''))) === 'CZ'
+            && in_array($delivery, ['DPD', 'DPD Pickup'], true)
+            && strcasecmp((string)($context->source ?? ''), 'allegro') !== 0
+            && $delivery !== 'Allegro One';
     }
 }
