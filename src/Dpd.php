@@ -17,6 +17,9 @@ class Dpd
 {
     use Concerns\DpdParcelIdentifier;
 
+    # GeoAPI internal CustomerID is short; DPD customer number (DSW) is much longer.
+    private const CUSTOMER_INTERNAL_ID_MAX_LENGTH = 6;
+
     public const STATUS_MAP = [
         'Parcel is delivered to recipient'              => 'Doručena',
         'Delivered'                                     => 'Doručena',
@@ -140,7 +143,7 @@ class Dpd
         }
 
         $payload = [
-            'customer'     => ['id' => (int)$account['customer_id']],
+            'customer'     => self::buildCustomerIdent($account),
             'shipmentType' => 'Standard',
             'references'   => [
                 'ref1' => (string)$entity->id,
@@ -263,6 +266,26 @@ class Dpd
         ];
 
         return $response->success($statusObject);
+    }
+
+    /**
+     * GeoAPI CustomerIdent: either internal CustomerID (`id`) or DPD customer number (`dsw`).
+     *
+     * @param array{customer_id: string} $account
+     * @return array{dsw: string}|array{id: int}
+     */
+    private static function buildCustomerIdent(array $account): array
+    {
+        $customerId = trim((string)($account['customer_id'] ?? ''));
+        if ($customerId === '') {
+            return [];
+        }
+
+        if (strlen($customerId) > self::CUSTOMER_INTERNAL_ID_MAX_LENGTH) {
+            return ['dsw' => $customerId];
+        }
+
+        return ['id' => (int)$customerId];
     }
 
     /**
