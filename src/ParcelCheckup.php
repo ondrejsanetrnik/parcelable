@@ -13,6 +13,7 @@ class ParcelCheckup
     {
         Parcel::query()
             ->where('carrier', '!=', 'Allegro One') # Allegro One is updated in batch through separate call
+            ->where(fn($q) => $q->where('carrier', '!=', 'DPD')->orWhereNotNull('parcelable_id'))
             ->whereIn('status', Parcel::ON_THE_WAY_STATUSES)
             ->when(rand(1, 100) <= 99, fn($q) => $q->where('updated_at', '>', now()->subMonth()))
             ->inRandomOrder()
