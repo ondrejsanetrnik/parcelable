@@ -76,7 +76,7 @@ class Gls
         return '[' . implode(',', unpack('C*', hash('sha512', config('parcelable.GLS_PASSWORD'), true))) . ']';
     }
 
-    #--GLS--
+    # --GLS--
     public static function getResponse($url, $method, $request): CoreResponse
     {
         $faultArrays = [
@@ -86,7 +86,7 @@ class Gls
         $faults = collect();
 
         $response = new CoreResponse();
-        //Service calling:
+        // Service calling:
         $curl = curl_init();
         curl_setopt($curl, CURLOPT_POST, 1);
         curl_setopt($curl, CURLOPT_URL, $url . $method);
@@ -109,6 +109,20 @@ class Gls
 
         $glsObject = json_decode($glsResponse);
 
+        if (!is_object($glsObject)) {
+            Log::warning('GLS API invalid response', [
+                'method'  => $method,
+                'empty'   => $glsResponse === '' || $glsResponse === false,
+                'preview' => is_string($glsResponse) ? substr($glsResponse, 0, 500) : null,
+            ]);
+
+            return $response->fail(
+                $glsResponse === '' || $glsResponse === false
+                    ? 'GLS API vrátilo prázdnou odpověď.'
+                    : 'Neplatná odpověď GLS API.'
+            );
+        }
+
         # Compile faults from all endpoints into one collection
         foreach ($faultArrays as $key) {
             $potentialFaults = collect($glsObject->$key ?? []);
@@ -124,13 +138,30 @@ class Gls
         return $response;
     }
 
-    #GLS INHERITED FUNCTION
+    # GLS INHERITED FUNCTION
     public static function printLabels($parcelsJson): CoreResponse
     {
         $request = '{"Username":"' . config('parcelable.GLS_USERNAME') . '","Password":' . self::hashPassword() . ',"ParcelList":' . $parcelsJson . '}';
         $response = self::getResponse(self::URL, 'PrintLabels', $request);
 
         if ($response->success) {
+            if (
+                !is_object($response->data)
+                || !isset($response->data->Labels, $response->data->PrintLabelsInfoList)
+                || !is_array($response->data->Labels)
+                || $response->data->Labels === []
+                || empty($response->data->PrintLabelsInfoList)
+            ) {
+                Log::warning('GLS PrintLabels: missing label payload', [
+                    'has_data'      => is_object($response->data),
+                    'has_labels'    => is_object($response->data) && isset($response->data->Labels),
+                    'has_info_list' => is_object($response->data) && isset($response->data->PrintLabelsInfoList),
+                    'error_list'    => is_object($response->data) ? ($response->data->PrintLabelsErrorList ?? null) : null,
+                ]);
+
+                return $response->fail('GLS nevrátilo štítek zásilky. Zkuste odeslání znovu; pokud problém přetrvá, napište do IT.');
+            }
+
             $pdf = implode(array_map('chr', $response->data->Labels));
             $trackingNumbers = [];
 
@@ -155,8 +186,7 @@ class Gls
         $request = '{"Username":"' . config('parcelable.GLS_USERNAME') . '","Password":' . self::hashPassword() . ',"ParcelIdList":' . json_encode($ids) . ',"PrintPosition":1,"ShowPrintDialog":0}';
         $response = self::getResponse(self::URL, 'GetPrintedLabels', $request);
 
-
-        //MAYDO WTF their API doesnt hanlde their own parcel IDs? {"GetPrintedLabelsErrorList":[{"ErrorCode":"1000","ErrorDescription":"There was an error deserializing the object of type GLS.MyGLS.ServiceData.APIDTOs.LabelOperations.GetPrintedLabelsRequest. The value '5007047633' cannot be parsed as the type 'Int32'."}]}
+        // MAYDO WTF their API doesnt hanlde their own parcel IDs? {"GetPrintedLabelsErrorList":[{"ErrorCode":"1000","ErrorDescription":"There was an error deserializing the object of type GLS.MyGLS.ServiceData.APIDTOs.LabelOperations.GetPrintedLabelsRequest. The value '5007047633' cannot be parsed as the type 'Int32'."}]}
         dd($response);
     }
 
@@ -170,8 +200,7 @@ class Gls
     public static function generateJson(
         Entity $entity,
         string $type = '',
-    ): string
-    {
+    ): string {
         $type = $type ?: $entity->default_parcel_type;
 
         $config = config('parcelable.GLS_CLIENTS')[$entity->eshop];
@@ -231,13 +260,12 @@ class Gls
                 'ZipCode'         => '46001',
                 'HouseNumberInfo' => config('parcelable.GLS_SENDER_INFO'),
             ],
-            'PickupDate'                                   => '/Date(' . ($entity->pickup_timestamp ?? now()->timestamp) . ')/',
-            'ServiceList'                                  => $serviceList,
+            'PickupDate'  => '/Date(' . ($entity->pickup_timestamp ?? now()->timestamp) . ')/',
+            'ServiceList' => $serviceList,
         ];
 
         return json_encode([$parcelArray], JSON_UNESCAPED_UNICODE);
     }
-
 
     /**
      * Creates a proto parcel object from given entity
@@ -245,13 +273,11 @@ class Gls
      * @param Entity $entity
      * @param string $type = ''
      * @return CoreResponse
-     *
      */
     public static function createFrom(
         Entity $entity,
         string $type = ''
-    ): CoreResponse
-    {
+    ): CoreResponse {
         $json = self::generateJson($entity, $type);
 
         # Print Labels function also saves the label to the folder
@@ -285,7 +311,6 @@ class Gls
         return $response;
     }
 
-
     /**
      * Checks the parcel status in GLS API
      *
@@ -297,7 +322,7 @@ class Gls
         if (!is_int($parcelNumber)) {
             $parcelNumber = intval(ltrim($parcelNumber, 'Zz'));
         }
-        //intval(ltrim($parcelNumber, 'Zz'))
+        // intval(ltrim($parcelNumber, 'Zz'))
         $request = '{"Username":"' . config('parcelable.GLS_USERNAME') . '","Password":' . self::hashPassword() . ',"ParcelNumber":' . $parcelNumber . ',"ReturnPOD":false,"LanguageIsoCode":"CS"}';
         $response = self::getResponse(self::URL, 'GetParcelStatuses', $request);
 
@@ -311,10 +336,10 @@ class Gls
 
             $statuses = collect($response->data->ParcelStatusList);
 
-//            foreach ($statuses as $statusObject) {
-//                if (!array_key_exists($statusObject->StatusDescription, self::STATUS_MAP))
-//                    Log::warning('GLS status not recognized: ' . $statusObject->StatusDescription);
-//            }
+            //            foreach ($statuses as $statusObject) {
+            //                if (!array_key_exists($statusObject->StatusDescription, self::STATUS_MAP))
+            //                    Log::warning('GLS status not recognized: ' . $statusObject->StatusDescription);
+            //            }
 
             $currentStatusDescription = $statuses[0]?->StatusDescription;
             $statusMap = self::STATUS_MAP;
@@ -367,7 +392,6 @@ class Gls
 
         $codSurcharge = $parcelable->is_cod ? $codCosts : 0;
 
-
         $selectedCountryCosts = collect(config('parcelable.GLS_PRICE_LIST.' . $zone));
 
         # Take the first cost that is greater than or equal to the weight
@@ -378,8 +402,7 @@ class Gls
             if ($parcelable->country == 'CZ') {
                 $baseCost = 32;
                 $tollSurcharge = $dieselSurcharge = 0; # No toll surcharge for ParcelShop in CZ
-            } else
-                $baseCost = $baseCost - 27;
+            } else $baseCost = $baseCost - 27;
         }
 
         return round($baseCost + ($dieselSurcharge * $baseCost) + ceil($weight) * $tollSurcharge + $codSurcharge, 2);
