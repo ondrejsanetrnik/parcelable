@@ -175,9 +175,17 @@ class Parcel extends Entity
      */
     public function updateStatus(): CoreResponse
     {
-        $response = $this->carrierClass === Dpd::class
-            ? Dpd::getParcelStatus($this->tracking_number, $this->parcelable)
-            : $this->carrierClass::getParcelStatus($this->tracking_number);
+        if ($this->carrierClass === Dpd::class) {
+            if (!$this->parcelable instanceof Entity) {
+                $response = new CoreResponse();
+
+                return $response->fail('DPD status: chybí parcelable (objednávka/zásilka).');
+            }
+
+            $response = Dpd::getParcelStatus($this->tracking_number, $this->parcelable);
+        } else {
+            $response = $this->carrierClass::getParcelStatus($this->tracking_number);
+        }
 
         # Persist if successful
         if ($response->success && $response->data) $this->update([
