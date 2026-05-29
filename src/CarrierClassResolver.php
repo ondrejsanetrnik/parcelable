@@ -24,7 +24,7 @@ final class CarrierClassResolver
         return Parcel::CARRIER_CLASS[$carrierName];
     }
 
-    private static function isAlzaSource(?object $context): bool
+    public static function isAlzaSource(?object $context): bool
     {
         return strcasecmp((string)($context?->source ?? ''), 'alza') === 0;
     }

@@ -20,6 +20,9 @@ class Dpd
     # GeoAPI internal CustomerID is short; DPD customer number (DSW) is much longer.
     private const CUSTOMER_INTERNAL_ID_MAX_LENGTH = 6;
 
+    # GeoAPI references: up to 4 strings, max 35 chars each (shipment + parcel level).
+    private const REFERENCE_MAX_LENGTH = 35;
+
     public const STATUS_MAP = [
         'Parcel is delivered to recipient'              => 'Doručena',
         'Delivered'                                     => 'Doručena',
@@ -113,17 +116,13 @@ class Dpd
         $parcelCount = max(1, (int)($entity->parcel_count ?: 1));
         $weightGrams = max(1, (int)round($entity->weight * 1000));
         $weightPerParcel = (int)max(1, round($weightGrams / $parcelCount));
+        $references = self::orderReferences($entity);
 
         $parcels = [];
         for ($i = 1; $i <= $parcelCount; $i++) {
-            $ref = (string)$entity->id . ($parcelCount > 1 ? '-' . $i : '');
             $parcel = [
                 'weightGrams' => $weightPerParcel,
-                'references'  => [
-                    'ref1' => Str::limit($ref, 35, ''),
-                    # DPD label PDF/ZPL používá pro tisk REF polí ref3/ref4.
-                    'ref3' => Str::limit($ref, 35, ''),
-                ],
+                'references'  => self::parcelReferences($references, $i, $parcelCount),
             ];
             $valueCzk = (float)($entity->value_for_parcel ?? 0);
             # GeoAPI přijímá additional insurance jen v CZK
@@ -142,13 +141,18 @@ class Dpd
             $contactPerson = Str::limit(trim($receiverName ?: 'Zákazník'), 35, '');
         }
 
+        $shipmentReferences = [
+            'ref1' => self::limitReference($references['primary']),
+        ];
+        if ($references['secondary'] !== null) {
+            $shipmentReferences['ref2'] = self::limitReference($references['secondary']);
+        }
+
         $payload = [
             'customer'     => self::buildCustomerIdent($account),
             'shipmentType' => 'Standard',
-            'references'   => [
-                'ref1' => (string)$entity->id,
-            ],
-            'sender' => [
+            'references'   => $shipmentReferences,
+            'sender'       => [
                 'it4emId' => $account['sender_it4em_id'],
             ],
             'receiver' => [
@@ -172,6 +176,57 @@ class Dpd
         ];
 
         return $payload;
+    }
+
+    /**
+     * Alza marketplace orders use external_id (Baselinker external_order_id) on the label;
+     * our internal order id is kept as a secondary reference when both fit.
+     *
+     * @return array{primary: string, secondary: string|null}
+     */
+    private static function orderReferences(Entity $entity): array
+    {
+        $internalId = (string)$entity->id;
+        $externalId = trim((string)($entity->external_id ?? ''));
+
+        if (CarrierClassResolver::isAlzaSource($entity) && $externalId !== '') {
+            return [
+                'primary'   => $externalId,
+                'secondary' => $internalId,
+            ];
+        }
+
+        return [
+            'primary'   => $internalId,
+            'secondary' => null,
+        ];
+    }
+
+    /**
+     * @param array{primary: string, secondary: string|null} $references
+     * @return array<string, string>
+     */
+    private static function parcelReferences(array $references, int $parcelIndex, int $parcelCount): array
+    {
+        $suffix = $parcelCount > 1 ? '-' . $parcelIndex : '';
+        $primary = self::limitReference($references['primary'] . $suffix);
+
+        $parcelReferences = [
+            'ref1' => $primary,
+            # DPD label PDF/ZPL uses ref3/ref4 for printed REF fields.
+            'ref3' => $primary,
+        ];
+
+        if ($references['secondary'] !== null) {
+            $parcelReferences['ref4'] = self::limitReference($references['secondary'] . $suffix);
+        }
+
+        return $parcelReferences;
+    }
+
+    private static function limitReference(string $reference): string
+    {
+        return Str::limit($reference, self::REFERENCE_MAX_LENGTH, '');
     }
 
     /**
