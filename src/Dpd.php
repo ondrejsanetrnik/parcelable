@@ -23,6 +23,13 @@ class Dpd
     # GeoAPI references: up to 4 strings, max 35 chars each (shipment + parcel level).
     private const REFERENCE_MAX_LENGTH = 35;
 
+    # Baselinker Alza Trade delivery_method values (synced to orders.carrier_id).
+    private const ALZA_CARRIER_HOME = 'DPD-DPD';
+
+    private const ALZA_CARRIER_BOX = 'DPD-DPDALZABOX';
+
+    private const ALZA_CARRIER_SUPPLIER = 'DPD-Supplier';
+
     public const STATUS_MAP = [
         'Parcel is delivered to recipient'              => 'Doručena',
         'Delivered'                                     => 'Doručena',
@@ -55,7 +62,11 @@ class Dpd
             return $coreResponse->fail('Chybí DPD účet pro eshop ' . ($entity->eshop ?? '?') . ' (config parcelable.DPD_ACCOUNTS).');
         }
 
-        $payload = [self::buildShipmentPayload($entity)];
+        try {
+            $payload = [self::buildShipmentPayload($entity)];
+        } catch (\RuntimeException $e) {
+            return $coreResponse->fail($e->getMessage());
+        }
 
         $response = self::http($account)->post(self::baseUrl() . '/shipments', $payload);
 
@@ -230,26 +241,20 @@ class Dpd
     }
 
     /**
+     * GeoAPI service elements → IT4EM product on label (Alza Trade contract):
+     * 327/329 home (notification, optional COD), 337 box (pickupPoint + notification), 101 supplier (empty services).
+     *
      * @return array<string, mixed>|object
      */
     private static function buildServices(Entity $entity): array|object
     {
-        $services = [];
-
-        if ($entity->is_cod) {
-            $currency = $entity->national_currency ?: 'CZK';
-            $parcelCount = max(1, (int)($entity->parcel_count ?: 1));
-            $amountCents = (int)round((float)$entity->cod_for_parcel * $parcelCount * 100);
-            $services['cashOnDelivery'] = [
-                'amountCents' => $amountCents,
-                'currency'    => $currency,
-                'payment'     => 'Cash',
-            ];
+        if (CarrierClassResolver::isAlzaSource($entity)) {
+            return self::buildAlzaTradeServices($entity);
         }
 
-        # pickupPoint = výdejní místo (DPD služba 101). Pro doručení na adresu (327) nesmí být vyplněno.
-        $isDpdPickup = ($entity->delivery ?? '') === 'DPD Pickup';
-        $pudo = $isDpdPickup ? trim((string)($entity->packeta ?? '')) : '';
+        $services = self::codService($entity);
+
+        $pudo = self::defaultPickupPoint($entity);
         if ($pudo !== '') {
             $services['pickupPoint'] = $pudo;
         }
@@ -260,6 +265,100 @@ class Dpd
         }
 
         return $services === [] ? (object)[] : $services;
+    }
+
+    /**
+     * Alza Trade: carrier_id from Baselinker delivery_method (see GET /shipping-services examples).
+     */
+    private static function buildAlzaTradeServices(Entity $entity): array|object
+    {
+        $services = self::codService($entity);
+        $method = trim((string)($entity->carrier_id ?? ''));
+
+        if ($method === '' || !str_starts_with($method, 'DPD-')) {
+            $method = self::inferAlzaCarrierId($entity, $method);
+        }
+
+        if ($method === self::ALZA_CARRIER_SUPPLIER) {
+            # 101 — GeoAPI example uses empty services (no notification, no pickupPoint).
+            return $services === [] ? (object)[] : $services;
+        }
+
+        if ($method === self::ALZA_CARRIER_BOX || str_contains($method, 'ALZABOX') || str_contains($method, 'DPDALZABOX')) {
+            $pudo = self::requirePickupPointId($entity, $method ?: self::ALZA_CARRIER_BOX);
+            if ($pudo !== '') {
+                $services['pickupPoint'] = $pudo;
+            }
+            $services['notification'] = true;
+
+            return $services;
+        }
+
+        # DPD-DPD (and fallback): 327/329 — notification only, never packeta on home delivery.
+        $services['notification'] = true;
+
+        return $services;
+    }
+
+    private static function inferAlzaCarrierId(Entity $entity, string $method): string
+    {
+        if ($method !== '') {
+            return $method;
+        }
+
+        $packeta = trim((string)($entity->packeta ?? ''));
+        if ($packeta !== '' && str_starts_with(strtoupper($packeta), 'CZ')) {
+            return self::ALZA_CARRIER_BOX;
+        }
+
+        if ($packeta !== '' && str_starts_with(strtoupper($packeta), 'AL')) {
+            return self::ALZA_CARRIER_SUPPLIER;
+        }
+
+        return self::ALZA_CARRIER_HOME;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function codService(Entity $entity): array
+    {
+        if (!$entity->is_cod) {
+            return [];
+        }
+
+        $currency = $entity->national_currency ?: 'CZK';
+        $parcelCount = max(1, (int)($entity->parcel_count ?: 1));
+        $amountCents = (int)round((float)$entity->cod_for_parcel * $parcelCount * 100);
+
+        return [
+            'cashOnDelivery' => [
+                'amountCents' => $amountCents,
+                'currency'    => $currency,
+                'payment'     => 'Cash',
+            ],
+        ];
+    }
+
+    private static function defaultPickupPoint(Entity $entity): string
+    {
+        if (($entity->delivery ?? '') !== 'DPD Pickup') {
+            return '';
+        }
+
+        return trim((string)($entity->packeta ?? ''));
+    }
+
+    private static function requirePickupPointId(Entity $entity, string $context): string
+    {
+        $pudo = trim((string)($entity->packeta ?? ''));
+        if ($pudo === '') {
+            throw new \RuntimeException(
+                'DPD Alza Trade box: chybí pickup point ID (packeta) pro objednávku ' . $entity->id . ' [' . $context . ']'
+            );
+        }
+
+        return $pudo;
     }
 
     private static function normalizePhone(?string $phone): string
