@@ -23,6 +23,13 @@ class Dpd
     # GeoAPI references: up to 4 strings, max 35 chars each (shipment + parcel level).
     private const REFERENCE_MAX_LENGTH = 35;
 
+    # Baselinker Alza Trade delivery_method values (synced to orders.carrier_id).
+    private const ALZA_CARRIER_HOME = 'DPD-DPD';
+
+    private const ALZA_CARRIER_BOX = 'DPD-DPDALZABOX';
+
+    private const ALZA_CARRIER_SUPPLIER = 'DPD-Supplier';
+
     public const STATUS_MAP = [
         'Parcel is delivered to recipient'              => 'Doručena',
         'Delivered'                                     => 'Doručena',
@@ -230,6 +237,9 @@ class Dpd
     }
 
     /**
+     * GeoAPI service elements → IT4EM product on label (Alza Trade contract):
+     * 327 home prepaid, 329 home COD, 337 DPD box (pickupPoint), 101 Alza branch (pickupPoint when known).
+     *
      * @return array<string, mixed>|object
      */
     private static function buildServices(Entity $entity): array|object
@@ -247,9 +257,10 @@ class Dpd
             ];
         }
 
-        # pickupPoint = výdejní místo (DPD služba 101). Pro doručení na adresu (327) nesmí být vyplněno.
-        $isDpdPickup = ($entity->delivery ?? '') === 'DPD Pickup';
-        $pudo = $isDpdPickup ? trim((string)($entity->packeta ?? '')) : '';
+        $pudo = CarrierClassResolver::isAlzaSource($entity)
+            ? self::alzaTradePickupPoint($entity)
+            : self::defaultPickupPoint($entity);
+
         if ($pudo !== '') {
             $services['pickupPoint'] = $pudo;
         }
@@ -260,6 +271,62 @@ class Dpd
         }
 
         return $services === [] ? (object)[] : $services;
+    }
+
+    /**
+     * Alza Trade: product from orders.carrier_id (Baselinker delivery_method), not from delivery label alone.
+     */
+    private static function alzaTradePickupPoint(Entity $entity): string
+    {
+        $method = trim((string)($entity->carrier_id ?? ''));
+
+        return match ($method) {
+            self::ALZA_CARRIER_HOME     => '',
+            self::ALZA_CARRIER_BOX      => self::requirePickupPointId($entity, self::ALZA_CARRIER_BOX),
+            self::ALZA_CARRIER_SUPPLIER => trim((string)($entity->packeta ?? '')),
+            default                     => self::alzaTradePickupPointFallback($entity, $method),
+        };
+    }
+
+    private static function alzaTradePickupPointFallback(Entity $entity, string $method): string
+    {
+        if ($method !== '' && !str_starts_with($method, 'DPD-')) {
+            return '';
+        }
+
+        if (str_contains($method, 'ALZABOX') || str_contains($method, 'DPDALZABOX')) {
+            return self::requirePickupPointId($entity, $method);
+        }
+
+        if ($method === self::ALZA_CARRIER_SUPPLIER || str_contains($method, 'Supplier')) {
+            return trim((string)($entity->packeta ?? ''));
+        }
+
+        # DPD-DPD / missing carrier_id: home (327/329) — never send packeta (wrong 337/101).
+        return '';
+    }
+
+    private static function defaultPickupPoint(Entity $entity): string
+    {
+        if (($entity->delivery ?? '') !== 'DPD Pickup') {
+            return '';
+        }
+
+        return trim((string)($entity->packeta ?? ''));
+    }
+
+    private static function requirePickupPointId(Entity $entity, string $context): string
+    {
+        $pudo = trim((string)($entity->packeta ?? ''));
+        if ($pudo === '') {
+            Log::channel('separated')->warning('DPD Alza Trade: missing pickup point ID', [
+                'order_id'   => $entity->id,
+                'carrier_id' => $entity->carrier_id,
+                'context'    => $context,
+            ]);
+        }
+
+        return $pudo;
     }
 
     private static function normalizePhone(?string $phone): string
