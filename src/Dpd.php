@@ -62,7 +62,11 @@ class Dpd
             return $coreResponse->fail('Chybí DPD účet pro eshop ' . ($entity->eshop ?? '?') . ' (config parcelable.DPD_ACCOUNTS).');
         }
 
-        $payload = [self::buildShipmentPayload($entity)];
+        try {
+            $payload = [self::buildShipmentPayload($entity)];
+        } catch (\RuntimeException $e) {
+            return $coreResponse->fail($e->getMessage());
+        }
 
         $response = self::http($account)->post(self::baseUrl() . '/shipments', $payload);
 
@@ -349,11 +353,9 @@ class Dpd
     {
         $pudo = trim((string)($entity->packeta ?? ''));
         if ($pudo === '') {
-            Log::channel('separated')->warning('DPD Alza Trade: missing pickup point ID', [
-                'order_id'   => $entity->id,
-                'carrier_id' => $entity->carrier_id,
-                'context'    => $context,
-            ]);
+            throw new \RuntimeException(
+                'DPD Alza Trade box: chybí pickup point ID (packeta) pro objednávku ' . $entity->id . ' [' . $context . ']'
+            );
         }
 
         return $pudo;
