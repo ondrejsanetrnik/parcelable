@@ -316,6 +316,10 @@ class Dpd
             return '%' . $normalized;
         }
 
+        if (preg_match('/^\d{28}$/', $normalized)) {
+            return '%' . substr($normalized, 1);
+        }
+
         $main = preg_replace('/\D/', '', self::trackingNumberFromBarcode($trackingNumber));
         if (strlen($main) !== 14) {
             return $trackingNumber;
