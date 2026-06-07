@@ -30,6 +30,20 @@ class Dpd
 
     private const ALZA_CARRIER_SUPPLIER = 'DPD-Supplier';
 
+    # DPD numeric destination country on barcode.
+    private const BARCODE_COUNTRY_CZ = '203';
+
+    private const BARCODE_COUNTRY_SK = '703';
+
+    # IT4EM product codes embedded in the DPD label barcode (must match GeoAPI / printed label).
+    private const IT4EM_SERVICE_HOME = 327;
+
+    private const IT4EM_SERVICE_HOME_COD = 329;
+
+    private const IT4EM_SERVICE_BOX = 337;
+
+    private const IT4EM_SERVICE_SUPPLIER = 101;
+
     public const STATUS_MAP = [
         'Parcel is delivered to recipient'              => 'Doručena',
         'Delivered'                                     => 'Doručena',
@@ -270,14 +284,77 @@ class Dpd
     /**
      * Alza Trade: carrier_id from Baselinker delivery_method (see GET /shipping-services examples).
      */
+    /**
+     * IT4EM service digit triplet in the DPD barcode (Baselinker / Alza full package number).
+     */
+    public static function it4emServiceCodeForBaselinker(Entity $entity): int
+    {
+        if (CarrierClassResolver::isAlzaSource($entity)) {
+            return self::alzaIt4emServiceCode($entity);
+        }
+
+        if (($entity->delivery ?? '') === 'DPD Pickup' && trim((string)($entity->packeta ?? '')) !== '') {
+            return self::IT4EM_SERVICE_BOX;
+        }
+
+        if ($entity->is_cod) {
+            return self::IT4EM_SERVICE_HOME_COD;
+        }
+
+        return self::IT4EM_SERVICE_HOME;
+    }
+
+    /**
+     * Builds DPD Code 128 payload for Baselinker: % + PSČ(7) + tracking(14) + služba(3) + země(3).
+     * GeoAPI returns only parcelNumbers.main (14 digits); full form matches the physical label barcode.
+     */
+    public static function fullBarcodeForBaselinker(object $entity, string $trackingNumber): string
+    {
+        $normalized = ltrim(rtrim($trackingNumber, '°'), '%');
+
+        if (preg_match('/^\d{27}$/', $normalized)) {
+            return '%' . $normalized;
+        }
+
+        if (preg_match('/^\d{28}$/', $normalized)) {
+            return '%' . substr($normalized, 1);
+        }
+
+        $main = preg_replace('/\D/', '', self::trackingNumberFromBarcode($trackingNumber));
+        if (strlen($main) !== 14) {
+            return $trackingNumber;
+        }
+
+        $postcode = self::postcodeFieldForBarcode($entity->postal_code ?? null);
+        $service = str_pad((string)self::it4emServiceCodeForBaselinker($entity), 3, '0', STR_PAD_LEFT);
+        $country = self::destinationCountryCodeForBarcode($entity->country ?? 'CZ');
+
+        return '%' . $postcode . $main . $service . $country;
+    }
+
+    private static function postcodeFieldForBarcode(?string $postalCode): string
+    {
+        $digits = preg_replace('/\D/', '', (string)$postalCode);
+        if ($digits === '') {
+            $digits = '0';
+        }
+
+        return str_pad(substr($digits, -7), 7, '0', STR_PAD_LEFT);
+    }
+
+    private static function destinationCountryCodeForBarcode(?string $country): string
+    {
+        return match (strtoupper(trim((string)$country))) {
+            'CZ'    => self::BARCODE_COUNTRY_CZ,
+            'SK'    => self::BARCODE_COUNTRY_SK,
+            default => self::BARCODE_COUNTRY_CZ,
+        };
+    }
+
     private static function buildAlzaTradeServices(Entity $entity): array|object
     {
         $services = self::codService($entity);
-        $method = trim((string)($entity->carrier_id ?? ''));
-
-        if ($method === '' || !str_starts_with($method, 'DPD-')) {
-            $method = self::inferAlzaCarrierId($entity, $method);
-        }
+        $method = self::resolvedAlzaCarrierMethod($entity);
 
         if ($method === self::ALZA_CARRIER_SUPPLIER) {
             # 101 — GeoAPI example uses empty services (no notification, no pickupPoint).
@@ -298,6 +375,36 @@ class Dpd
         $services['notification'] = true;
 
         return $services;
+    }
+
+    private static function resolvedAlzaCarrierMethod(Entity $entity): string
+    {
+        $method = trim((string)($entity->carrier_id ?? ''));
+
+        if ($method === '' || !str_starts_with($method, 'DPD-')) {
+            return self::inferAlzaCarrierId($entity, $method);
+        }
+
+        return $method;
+    }
+
+    private static function alzaIt4emServiceCode(Entity $entity): int
+    {
+        $method = self::resolvedAlzaCarrierMethod($entity);
+
+        if ($method === self::ALZA_CARRIER_SUPPLIER) {
+            return self::IT4EM_SERVICE_SUPPLIER;
+        }
+
+        if ($method === self::ALZA_CARRIER_BOX || str_contains($method, 'ALZABOX') || str_contains($method, 'DPDALZABOX')) {
+            return self::IT4EM_SERVICE_BOX;
+        }
+
+        if ($entity->is_cod) {
+            return self::IT4EM_SERVICE_HOME_COD;
+        }
+
+        return self::IT4EM_SERVICE_HOME;
     }
 
     private static function inferAlzaCarrierId(Entity $entity, string $method): string

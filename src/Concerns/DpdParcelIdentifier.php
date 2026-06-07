@@ -14,15 +14,24 @@ trait DpdParcelIdentifier
         # Some scanners wrap values with "%" prefix or "°" suffix.
         $normalizedBarcode = ltrim(rtrim($barcode, '°'), '%');
 
-        if (preg_match('/^\d{27,28}$/', $normalizedBarcode)) return substr($normalizedBarcode, 7, 14);
+        if (preg_match('/^\d{27}$/', $normalizedBarcode)) {
+            return substr($normalizedBarcode, 7, 14);
+        }
+
+        if (preg_match('/^\d{28}$/', $normalizedBarcode)) {
+            return substr($normalizedBarcode, 8, 14);
+        }
 
         return $barcode;
     }
 
     public static function isBarcode(?string $barcode = null): bool
     {
-        if (!$barcode) return false;
+        if (!$barcode) {
+            return false;
+        }
 
-        return boolval(self::trackingNumberFromBarcode($barcode) !== $barcode);
+        return self::trackingNumberFromBarcode($barcode) !== $barcode;
     }
+
 }
