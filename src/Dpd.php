@@ -30,6 +30,15 @@ class Dpd
 
     private const ALZA_CARRIER_SUPPLIER = 'DPD-Supplier';
 
+    # IT4EM product codes embedded in the DPD label barcode (must match GeoAPI / printed label).
+    private const IT4EM_SERVICE_HOME = 327;
+
+    private const IT4EM_SERVICE_HOME_COD = 329;
+
+    private const IT4EM_SERVICE_BOX = 337;
+
+    private const IT4EM_SERVICE_SUPPLIER = 101;
+
     public const STATUS_MAP = [
         'Parcel is delivered to recipient'              => 'Doručena',
         'Delivered'                                     => 'Doručena',
@@ -270,14 +279,30 @@ class Dpd
     /**
      * Alza Trade: carrier_id from Baselinker delivery_method (see GET /shipping-services examples).
      */
+    /**
+     * IT4EM service digit triplet in the DPD barcode (Baselinker / Alza full package number).
+     */
+    public static function it4emServiceCodeForBaselinker(Entity $entity): int
+    {
+        if (CarrierClassResolver::isAlzaSource($entity)) {
+            return self::alzaIt4emServiceCode($entity);
+        }
+
+        if (($entity->delivery ?? '') === 'DPD Pickup' && trim((string)($entity->packeta ?? '')) !== '') {
+            return self::IT4EM_SERVICE_BOX;
+        }
+
+        if ($entity->is_cod) {
+            return self::IT4EM_SERVICE_HOME_COD;
+        }
+
+        return self::IT4EM_SERVICE_HOME;
+    }
+
     private static function buildAlzaTradeServices(Entity $entity): array|object
     {
         $services = self::codService($entity);
-        $method = trim((string)($entity->carrier_id ?? ''));
-
-        if ($method === '' || !str_starts_with($method, 'DPD-')) {
-            $method = self::inferAlzaCarrierId($entity, $method);
-        }
+        $method = self::resolvedAlzaCarrierMethod($entity);
 
         if ($method === self::ALZA_CARRIER_SUPPLIER) {
             # 101 — GeoAPI example uses empty services (no notification, no pickupPoint).
@@ -298,6 +323,36 @@ class Dpd
         $services['notification'] = true;
 
         return $services;
+    }
+
+    private static function resolvedAlzaCarrierMethod(Entity $entity): string
+    {
+        $method = trim((string)($entity->carrier_id ?? ''));
+
+        if ($method === '' || !str_starts_with($method, 'DPD-')) {
+            return self::inferAlzaCarrierId($entity, $method);
+        }
+
+        return $method;
+    }
+
+    private static function alzaIt4emServiceCode(Entity $entity): int
+    {
+        $method = self::resolvedAlzaCarrierMethod($entity);
+
+        if ($method === self::ALZA_CARRIER_SUPPLIER) {
+            return self::IT4EM_SERVICE_SUPPLIER;
+        }
+
+        if ($method === self::ALZA_CARRIER_BOX || str_contains($method, 'ALZABOX') || str_contains($method, 'DPDALZABOX')) {
+            return self::IT4EM_SERVICE_BOX;
+        }
+
+        if ($entity->is_cod) {
+            return self::IT4EM_SERVICE_HOME_COD;
+        }
+
+        return self::IT4EM_SERVICE_HOME;
     }
 
     private static function inferAlzaCarrierId(Entity $entity, string $method): string
