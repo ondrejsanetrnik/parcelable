@@ -53,7 +53,12 @@ class ParcelObserver
             }
         }
 
-        if ($statusChanged && $parcel->status === 'Na cestě zpátky' && config('parcelable.send_returning_email', false)) {
+        # Also on "Vrácena obchodu" — some carriers skip "Na cestě zpátky"
+        if (
+            $statusChanged
+            && in_array($parcel->status, ['Na cestě zpátky', 'Vrácena obchodu'], true)
+            && config('parcelable.send_returning_email', false)
+        ) {
             $this->sendParcelReturningEmail($parcel);
         }
     }
@@ -62,11 +67,23 @@ class ParcelObserver
     {
         $order = $parcel->parcelable;
 
-        if (!$order || !method_exists($order, 'hasEvents')) {
+        if (!$order || !method_exists($order, 'events') || !method_exists($order, 'mailSelf') || !method_exists($order, 'parcels')) {
             return;
         }
 
-        if ($order->hasEvents([EventName::ZasilkaSeVraciEmailOdeslan])) {
+        # Ignore status updates on older parcels after a resend was created
+        $latestParcelId = $order->parcels()->orderByDesc('id')->value('id');
+        if ($latestParcelId && (int)$latestParcelId !== (int)$parcel->id) {
+            return;
+        }
+
+        # One email per return cycle (per parcel), not once for the whole order lifetime
+        $alreadySentForThisParcel = $order->events()
+            ->where('title', EventName::ZasilkaSeVraciEmailOdeslan->value)
+            ->where('created_at', '>=', $parcel->created_at)
+            ->exists();
+
+        if ($alreadySentForThisParcel) {
             return;
         }
 
