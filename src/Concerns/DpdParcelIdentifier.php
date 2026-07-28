@@ -11,8 +11,9 @@ trait DpdParcelIdentifier
     public static function trackingNumberFromBarcode(string $barcode): string
     {
         # DPD barcode format: 27 or 28 digits (I+postcode+tracking+service+country)
-        # Some scanners wrap values with "%" prefix or "°" suffix.
-        $normalizedBarcode = ltrim(rtrim($barcode, '°'), '%');
+        # Scanners wrap with "%" / "E" / "°"; labels print the digits in groups with spaces.
+        $normalizedBarcode = preg_replace('/\s+/', '', trim($barcode)) ?? $barcode;
+        $normalizedBarcode = preg_replace('/^\D+|\D+$/', '', $normalizedBarcode) ?? $normalizedBarcode;
 
         if (preg_match('/^\d{27}$/', $normalizedBarcode)) {
             return substr($normalizedBarcode, 7, 14);
@@ -33,5 +34,4 @@ trait DpdParcelIdentifier
 
         return self::trackingNumberFromBarcode($barcode) !== $barcode;
     }
-
 }
