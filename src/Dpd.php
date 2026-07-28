@@ -44,9 +44,14 @@ class Dpd
 
     private const IT4EM_SERVICE_SUPPLIER = 101;
 
+    # GeoAPI: code 13 finalizes the lifecycle for delivery to consignee OR back to sender.
+    private const DELIVERED_STATUS_CODE = '13';
+
     public const STATUS_MAP = [
         'Parcel is delivered to recipient'              => 'Doručena',
+        'Parcel is delivered to consignee'              => 'Doručena',
         'Delivered'                                     => 'Doručena',
+        'Parcel was picked up by consignee from Pickup point' => 'Doručena',
         'Parcel picked up by delivery driver'           => 'Doručována',
         'Parcel has been given additional information'  => 'V přepravě',
         'Accepted on delivery Depot'                    => 'V přepravě',
@@ -55,14 +60,25 @@ class Dpd
         'Parcel accepted on dispatch depot'             => 'Přijata k přepravě',
         'Předáno příjemci'                              => 'Doručena',
         'Předáno do rukou'                              => 'Doručena',
+        'Zásilka doručena'                              => 'Doručena',
+        'Zásilka doručena příjemci'                     => 'Doručena',
         'Ready for return to The courier'               => 'Na cestě zpátky',
         'Returned to The courier'                       => 'Na cestě zpátky',
+        'Parcel is returned to sender'                  => 'Na cestě zpátky',
+        'Returning to Sender'                           => 'Na cestě zpátky',
+        'Returned to Sender'                            => 'Na cestě zpátky',
+        'Vráceno odesílateli'                           => 'Na cestě zpátky',
     ];
 
     # Match by description only — DPD reuses numeric codes (e.g. 6 vs 06) for unrelated events.
+    # Do not include ambiguous "wrong depot... or returned to sender" here.
     private const RETURN_STATUS_DESCRIPTIONS = [
         'Ready for return to The courier',
         'Returned to The courier',
+        'Parcel is returned to sender',
+        'Returning to Sender',
+        'Returned to Sender',
+        'Vráceno odesílateli',
     ];
 
     public static function getCostFor(ParcelableContract $parcelable): float
@@ -532,12 +548,13 @@ class Dpd
     public static function mapStatusFromParcelEvents(array $events, ?string $parcelNumber = null): string
     {
         usort($events, fn($a, $b) => strcmp($b['createdAt'] ?? '', $a['createdAt'] ?? ''));
-        $latest = $events[0];
-        $desc = $latest['status']['description'] ?? '';
+
+        $latest = $events[0] ?? [];
+        $desc = self::normalizeEventDescription($latest['status']['description'] ?? '');
         $code = (string)($latest['status']['statusCode'] ?? '');
 
-        $mapped = self::STATUS_MAP[$desc] ?? null;
-        if ($mapped === null && $code === '13') {
+        $mapped = self::STATUS_MAP[$desc] ?? self::STATUS_MAP[$desc . '.'] ?? null;
+        if ($mapped === null && $code === self::DELIVERED_STATUS_CODE) {
             $mapped = 'Doručena';
         }
         if ($mapped === null) {
@@ -549,19 +566,44 @@ class Dpd
             $mapped = 'V přepravě';
         }
 
-        $hasReturnInHistory = collect($events)->contains(
-            fn($event) => in_array($event['status']['description'] ?? '', self::RETURN_STATUS_DESCRIPTIONS, true)
-        );
-
-        if (!$hasReturnInHistory) {
+        if (!self::eventsContainReturnToSender($events)) {
             return $mapped;
         }
 
+        # DPD often labels return-to-sender handover as "delivered to recipient" (code 13).
         if ($mapped === 'Doručena') {
             return 'Vrácena obchodu';
         }
 
         return 'Na cestě zpátky';
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $events
+     */
+    private static function eventsContainReturnToSender(array $events): bool
+    {
+        foreach ($events as $event) {
+            $description = self::normalizeEventDescription($event['status']['description'] ?? '');
+            if ($description === '') {
+                continue;
+            }
+
+            if (in_array($description, self::RETURN_STATUS_DESCRIPTIONS, true)) {
+                return true;
+            }
+
+            if (in_array($description . '.', self::RETURN_STATUS_DESCRIPTIONS, true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static function normalizeEventDescription(?string $description): string
+    {
+        return rtrim(trim((string)$description), '.');
     }
 
     /**
