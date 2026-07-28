@@ -47,9 +47,6 @@ class Dpd
     # GeoAPI: code 13 finalizes the lifecycle for delivery to consignee OR back to sender.
     private const DELIVERED_STATUS_CODE = '13';
 
-    # GeoAPI / DPD scan code for system return / return-to-sender routing.
-    private const RETURN_TO_SENDER_STATUS_CODE = '06';
-
     public const STATUS_MAP = [
         'Parcel is delivered to recipient'              => 'Doručena',
         'Parcel is delivered to consignee'              => 'Doručena',
@@ -65,11 +62,23 @@ class Dpd
         'Předáno do rukou'                              => 'Doručena',
         'Zásilka doručena'                              => 'Doručena',
         'Zásilka doručena příjemci'                     => 'Doručena',
+        'Ready for return to The courier'               => 'Na cestě zpátky',
+        'Returned to The courier'                       => 'Na cestě zpátky',
         'Parcel is returned to sender'                  => 'Na cestě zpátky',
         'Returning to Sender'                           => 'Na cestě zpátky',
         'Returned to Sender'                            => 'Na cestě zpátky',
         'Vráceno odesílateli'                           => 'Na cestě zpátky',
-        'Parcel arrived to wrong depot, it is forwarded to another depot or returned to sender' => 'Na cestě zpátky',
+    ];
+
+    # Match by description only — DPD reuses numeric codes (e.g. 6 vs 06) for unrelated events.
+    # Do not include ambiguous "wrong depot... or returned to sender" here.
+    private const RETURN_STATUS_DESCRIPTIONS = [
+        'Ready for return to The courier',
+        'Returned to The courier',
+        'Parcel is returned to sender',
+        'Returning to Sender',
+        'Returned to Sender',
+        'Vráceno odesílateli',
     ];
 
     public static function getCostFor(ParcelableContract $parcelable): float
@@ -519,7 +528,7 @@ class Dpd
             return $response->fail('DPD nevrátilo žádné události sledování.');
         }
 
-        $mapped = self::resolveStatusFromEvents($events, $parcelNumber);
+        $mapped = self::mapStatusFromParcelEvents($events, $parcelNumber);
 
         $statusObject = (object)[
             'status' => $mapped,
@@ -529,9 +538,14 @@ class Dpd
     }
 
     /**
+     * Maps DPD GeoAPI parcelEvents to an internal parcel status.
+     * When any return-to-sender event exists in history, later "delivered" means
+     * delivered back to us (same trap GLS has), and intermediate depot scans
+     * must stay on "Na cestě zpátky" instead of falling back to "V přepravě".
+     *
      * @param array<int, array<string, mixed>> $events
      */
-    private static function resolveStatusFromEvents(array $events, int|string $parcelNumber): string
+    public static function mapStatusFromParcelEvents(array $events, ?string $parcelNumber = null): string
     {
         usort($events, fn($a, $b) => strcmp($b['createdAt'] ?? '', $a['createdAt'] ?? ''));
 
@@ -539,7 +553,10 @@ class Dpd
         $desc = self::normalizeEventDescription($latest['status']['description'] ?? '');
         $code = (string)($latest['status']['statusCode'] ?? '');
 
-        $mapped = self::mapEventToStatus($latest);
+        $mapped = self::STATUS_MAP[$desc] ?? self::STATUS_MAP[$desc . '.'] ?? null;
+        if ($mapped === null && $code === self::DELIVERED_STATUS_CODE) {
+            $mapped = 'Doručena';
+        }
         if ($mapped === null) {
             Log::channel('separated')->warning('DPD status not mapped', [
                 'description'  => $desc,
@@ -549,13 +566,16 @@ class Dpd
             $mapped = 'V přepravě';
         }
 
+        if (!self::eventsContainReturnToSender($events)) {
+            return $mapped;
+        }
+
         # DPD often labels return-to-sender handover as "delivered to recipient" (code 13).
-        # Same safeguard as GLS: if tracking history shows a return, do not treat as customer delivery.
-        if ($mapped === 'Doručena' && self::eventsContainReturnToSender($events)) {
+        if ($mapped === 'Doručena') {
             return 'Vrácena obchodu';
         }
 
-        return $mapped;
+        return 'Na cestě zpátky';
     }
 
     /**
@@ -564,79 +584,21 @@ class Dpd
     private static function eventsContainReturnToSender(array $events): bool
     {
         foreach ($events as $event) {
-            if (self::eventIndicatesReturnToSender($event)) {
+            $description = self::normalizeEventDescription($event['status']['description'] ?? '');
+            if ($description === '') {
+                continue;
+            }
+
+            if (in_array($description, self::RETURN_STATUS_DESCRIPTIONS, true)) {
+                return true;
+            }
+
+            if (in_array($description . '.', self::RETURN_STATUS_DESCRIPTIONS, true)) {
                 return true;
             }
         }
 
         return false;
-    }
-
-    /**
-     * @param array<string, mixed> $event
-     */
-    private static function eventIndicatesReturnToSender(array $event): bool
-    {
-        $code = (string)($event['status']['statusCode'] ?? '');
-        if ($code === self::RETURN_TO_SENDER_STATUS_CODE) {
-            return true;
-        }
-
-        $description = mb_strtolower(self::normalizeEventDescription($event['status']['description'] ?? ''));
-        if ($description === '') {
-            return false;
-        }
-
-        # "Driver picked up parcel from sender" must not count as a return.
-        if (str_contains($description, 'from sender')) {
-            return false;
-        }
-
-        # "Parcel arrived to wrong depot..." describes forwarding OR return, so it is not a definitive return.
-        if (str_contains($description, 'wrong depot')) {
-            return false;
-        }
-
-        return str_contains($description, 'returned to sender')
-            || str_contains($description, 'returning to sender')
-            || str_contains($description, 'return to sender')
-            || str_contains($description, 'vráceno odesílateli')
-            || str_contains($description, 'vrácena odesílateli');
-    }
-
-    /**
-     * @param array<string, mixed> $event
-     */
-    private static function mapEventToStatus(array $event): ?string
-    {
-        $description = self::normalizeEventDescription($event['status']['description'] ?? '');
-        $code = (string)($event['status']['statusCode'] ?? '');
-
-        if ($description !== '') {
-            $mapped = self::STATUS_MAP[$description] ?? self::STATUS_MAP[$description . '.'] ?? null;
-            if ($mapped !== null) {
-                return $mapped;
-            }
-        }
-
-        if ($code === self::RETURN_TO_SENDER_STATUS_CODE) {
-            return 'Na cestě zpátky';
-        }
-
-        if ($code === self::DELIVERED_STATUS_CODE) {
-            $descriptionLower = mb_strtolower($description);
-
-            if (
-                str_contains($descriptionLower, 'sender')
-                || str_contains($descriptionLower, 'odesílatel')
-            ) {
-                return 'Na cestě zpátky';
-            }
-
-            return 'Doručena';
-        }
-
-        return null;
     }
 
     private static function normalizeEventDescription(?string $description): string
