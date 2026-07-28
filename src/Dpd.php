@@ -592,6 +592,11 @@ class Dpd
             return false;
         }
 
+        # "Parcel arrived to wrong depot..." describes forwarding OR return, so it is not a definitive return.
+        if (str_contains($description, 'wrong depot')) {
+            return false;
+        }
+
         return str_contains($description, 'returned to sender')
             || str_contains($description, 'returning to sender')
             || str_contains($description, 'return to sender')
