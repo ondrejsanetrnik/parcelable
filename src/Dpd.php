@@ -55,6 +55,14 @@ class Dpd
         'Parcel accepted on dispatch depot'             => 'Přijata k přepravě',
         'Předáno příjemci'                              => 'Doručena',
         'Předáno do rukou'                              => 'Doručena',
+        'Ready for return to The courier'               => 'Na cestě zpátky',
+        'Returned to The courier'                       => 'Na cestě zpátky',
+    ];
+
+    # Match by description only — DPD reuses numeric codes (e.g. 6 vs 06) for unrelated events.
+    private const RETURN_STATUS_DESCRIPTIONS = [
+        'Ready for return to The courier',
+        'Returned to The courier',
     ];
 
     public static function getCostFor(ParcelableContract $parcelable): float
@@ -504,6 +512,25 @@ class Dpd
             return $response->fail('DPD nevrátilo žádné události sledování.');
         }
 
+        $mapped = self::mapStatusFromParcelEvents($events, $parcelNumber);
+
+        $statusObject = (object)[
+            'status' => $mapped,
+        ];
+
+        return $response->success($statusObject);
+    }
+
+    /**
+     * Maps DPD GeoAPI parcelEvents to an internal parcel status.
+     * When any return-to-sender event exists in history, later "delivered" means
+     * delivered back to us (same trap GLS has), and intermediate depot scans
+     * must stay on "Na cestě zpátky" instead of falling back to "V přepravě".
+     *
+     * @param array<int, array<string, mixed>> $events
+     */
+    public static function mapStatusFromParcelEvents(array $events, ?string $parcelNumber = null): string
+    {
         usort($events, fn($a, $b) => strcmp($b['createdAt'] ?? '', $a['createdAt'] ?? ''));
         $latest = $events[0];
         $desc = $latest['status']['description'] ?? '';
@@ -522,11 +549,19 @@ class Dpd
             $mapped = 'V přepravě';
         }
 
-        $statusObject = (object)[
-            'status' => $mapped,
-        ];
+        $hasReturnInHistory = collect($events)->contains(
+            fn($event) => in_array($event['status']['description'] ?? '', self::RETURN_STATUS_DESCRIPTIONS, true)
+        );
 
-        return $response->success($statusObject);
+        if (!$hasReturnInHistory) {
+            return $mapped;
+        }
+
+        if ($mapped === 'Doručena') {
+            return 'Vrácena obchodu';
+        }
+
+        return 'Na cestě zpátky';
     }
 
     /**
