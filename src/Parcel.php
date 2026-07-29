@@ -187,12 +187,19 @@ class Parcel extends Entity
             $response = $this->carrierClass::getParcelStatus($this->tracking_number);
         }
 
-        # Persist if successful
-        if ($response->success && $response->data) $this->update([
-            'status'                   => $response->data->status,
-            'stored_until'             => $response->data->storedUntil ?? null,
-            'external_tracking_number' => $response->data->external_tracking_number ?? null,
-        ]);
+        # Persist if successful — skip null status so an unmapped carrier code cannot wipe a known state
+        if ($response->success && $response->data) {
+            $attributes = [
+                'stored_until'             => $response->data->storedUntil ?? null,
+                'external_tracking_number' => $response->data->external_tracking_number ?? null,
+            ];
+
+            if (isset($response->data->status)) {
+                $attributes['status'] = $response->data->status;
+            }
+
+            $this->update($attributes);
+        }
 
         return $response;
     }

@@ -3,7 +3,9 @@
 namespace Ondrejsanetrnik\Parcelable;
 
 use App\Models\Entity;
+use App\Models\User;
 use Exception;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Ondrejsanetrnik\Core\CoreResponse;
@@ -24,21 +26,27 @@ use SoapFault;
 class Packeta
 {
     public const STATUS_MAP = [
-        'received data'          => 'Čeká na vyzvednutí kurýrem',
-        'arrived'                => 'Přijata k přepravě',
-        'reverse packet arrived' => 'Přijata k přepravě',
-        'collected'              => 'Přijata k přepravě',
-        'prepared for departure' => 'V přepravě',
-        'departed'               => 'V přepravě',
-        'ready for pickup'       => 'Připravena k vyzvednutí',
-        'handed to carrier'      => 'Doručována',
-        'delivery attempt'       => 'Doručována',
-        'zbox delivery attempt'  => 'Doručována',
-        'delivered'              => 'Doručena',
-        'posted back'            => 'Na cestě zpátky',
-        'rejected by recipient'  => 'Na cestě zpátky',
-        'returned'               => 'Vrácena obchodu',
-        'cancelled'              => 'Stornována',
+        'received data'                   => 'Čeká na vyzvednutí kurýrem',
+        'arrived'                         => 'Přijata k přepravě',
+        'reverse packet arrived'          => 'Přijata k přepravě',
+        'collected'                       => 'Přijata k přepravě',
+        'prepared for departure'          => 'V přepravě',
+        'departed'                        => 'V přepravě',
+        'no favourite point set redirect' => 'V přepravě',
+        'packet under investigation'      => 'V přepravě',
+        'ready for pickup'                => 'Připravena k vyzvednutí',
+        'handed to carrier'               => 'Doručována',
+        'delivery attempt'                => 'Doručována',
+        'carrier first delivery attempt'  => 'Doručována',
+        'courier tracking code added'     => 'Doručována',
+        'zbox delivery attempt'           => 'Doručována',
+        'zbox last delivery attempt'      => 'Doručována',
+        'delivered'                       => 'Doručena',
+        'posted back'                     => 'Na cestě zpátky',
+        'rejected by recipient'           => 'Na cestě zpátky',
+        'storage time expired'            => 'Na cestě zpátky',
+        'returned'                        => 'Vrácena obchodu',
+        'cancelled'                       => 'Stornována',
     ];
 
     public static function __callStatic(string $method, array $parameters): CoreResponse
@@ -73,6 +81,7 @@ class Packeta
      *
      * @param string|int $parcelNumber
      * @return CoreResponse
+     *
      * @throws Exception
      */
     public static function getParcelStatus(string|int $parcelNumber): CoreResponse
@@ -86,13 +95,14 @@ class Packeta
         if ($response->success) {
             $lastStatusObject = is_array($response->data->record) ? end($response->data->record) : $response->data->record;
 
-            $lastStatusObject->status = self::STATUS_MAP[$lastStatusObject->codeText] ?? null;
+            $codeText = (string)($lastStatusObject->codeText ?? '');
+            $mappedStatus = self::STATUS_MAP[$codeText] ?? null;
 
-            if ($lastStatusObject->status === null) {
-                Log::channel('separated')->warning('Packeta status not found', [
-                    'code'         => $lastStatusObject->codeText,
-                    'parcelNumber' => $parcelNumber,
-                ]);
+            if ($mappedStatus === null) {
+                unset($lastStatusObject->status);
+                self::notifyUnknownStatus($codeText, $parcelNumber);
+            } else {
+                $lastStatusObject->status = $mappedStatus;
             }
 
             $lastStatusObject->external_tracking_number = collect($response->data->record)
@@ -107,6 +117,35 @@ class Packeta
     }
 
     /**
+     * Log + Slack (once per day per code) when Packeta returns an unmapped status.
+     * Status is left unset so Parcel::updateStatus keeps the previous known value.
+     */
+    protected static function notifyUnknownStatus(string $codeText, int|string $parcelNumber): void
+    {
+        Log::channel('separated')->warning('Packeta status not found', [
+            'code'         => $codeText,
+            'parcelNumber' => $parcelNumber,
+        ]);
+
+        $cacheKey = 'packeta-unknown-status:' . ($codeText !== '' ? $codeText : 'empty');
+        if (!Cache::add($cacheKey, true, now()->addDay())) {
+            return;
+        }
+
+        try {
+            User::find(1)?->sendSlackMessage(
+                "⚠️ Packeta: neznámý stav zásilky `{$codeText}` (parcel {$parcelNumber})."
+                . ' Doplň mapování v Packeta::STATUS_MAP.'
+            );
+        } catch (\Throwable $e) {
+            Log::warning('Failed to send Packeta unknown status Slack notification', [
+                'error' => $e->getMessage(),
+                'code'  => $codeText,
+            ]);
+        }
+    }
+
+    /**
      * Creates the parcel in Packeta API
      *
      * @param Entity $entity
@@ -116,8 +155,7 @@ class Packeta
     public static function createFrom(
         Entity $entity,
         string $type = ''
-    ): CoreResponse
-    {
+    ): CoreResponse {
         $type = $type ?: $entity->default_parcel_type;
         $protoParcels = [];
 
@@ -176,8 +214,7 @@ class Packeta
             # Label is provided by the external carrier
             if ($externalCarrierData = self::packetCourierNumberV2($id)->data)
                 $response = self::packetCourierLabelPdf($id, $externalCarrierData->courierNumber);
-            else
-                $response = self::packetLabelPdf($id, config('parcelable.PACKETA_LABEL_FORMAT'), 0);
+            else $response = self::packetLabelPdf($id, config('parcelable.PACKETA_LABEL_FORMAT'), 0);
         } else {
             # Label is provided by Packeta
             $response = self::packetLabelPdf($id, config('parcelable.PACKETA_LABEL_FORMAT'), 0);
@@ -187,7 +224,6 @@ class Packeta
             Storage::disk('private')->put('labels/' . $id . '.pdf', $response->data);
         }
     }
-
 
     /**
      * Currently roughly precise only for CZ, SK, PL and HU. Progressive price of COD and insurance is mostly skipped.
@@ -211,41 +247,41 @@ class Packeta
                 99 => 72,
             ],
             'PL' => [
-                null                        => [
+                null => [
                     5  => 65,
                     99 => 128,
                 ],
                 CarrierId::PL_INPOST->value => [ # InPost Paczkomaty
-                                                 5  => 145,
-                                                 10 => 175,
-                                                 99 => 185,
+                    5  => 145,
+                    10 => 175,
+                    99 => 185,
                 ],
-                14052                       => [ # Polská Pošta PP
-                                                 10 => 110,
-                                                 99 => 170,
+                14052 => [ # Polská Pošta PP
+                    10 => 110,
+                    99 => 170,
                 ],
             ],
             'HU' => [
-                null  => [
+                null => [
                     5  => 85,
                     99 => 160,
                 ],
                 32970 => [ # FoxPost PP
-                           5  => 85,
-                           99 => 160,
+                    5  => 85,
+                    99 => 160,
                 ],
-                4539  => [ # Maďarská Pošta Box
-                           2  => 130,
-                           5  => 150,
-                           10 => 170,
-                           15 => 270,
+                4539 => [ # Maďarská Pošta Box
+                    2  => 130,
+                    5  => 150,
+                    10 => 170,
+                    15 => 270,
                 ],
                 29760 => [ # Maďarská Pošta PP
-                           2  => 130,
-                           5  => 150,
-                           10 => 170,
-                           15 => 270,
-                           20 => 399,
+                    2  => 130,
+                    5  => 150,
+                    10 => 170,
+                    15 => 270,
+                    20 => 399,
                 ],
             ],
             'DE' => [
