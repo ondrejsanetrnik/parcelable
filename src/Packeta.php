@@ -34,6 +34,7 @@ class Packeta
         'departed'                        => 'V přepravě',
         'no favourite point set redirect' => 'V přepravě',
         'packet under investigation'      => 'V přepravě',
+        'packet investigation resolved'   => 'V přepravě',
         'ready for pickup'                => 'Připravena k vyzvednutí',
         'handed to carrier'               => 'Doručována',
         'delivery attempt'                => 'Doručována',
