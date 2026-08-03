@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\Log;
 
 class ParcelObserver
 {
+    private const MAX_RETURNING_EMAIL_PARCEL_AGE_DAYS = 60;
+
     /**
      * Handle the parcel "updated" event.
      *
@@ -68,6 +70,16 @@ class ParcelObserver
         $order = $parcel->parcelable;
 
         if (!$order || !method_exists($order, 'events') || !method_exists($order, 'mailSelf') || !method_exists($order, 'parcels')) {
+            return;
+        }
+
+        # Cancelled orders must never get a return decision email
+        if (($order->state ?? null) === 'Stornováno') {
+            return;
+        }
+
+        # Stale historical parcels (e.g. revived by a full checkup scan) must not email customers
+        if ($parcel->created_at?->lt(now()->subDays(self::MAX_RETURNING_EMAIL_PARCEL_AGE_DAYS))) {
             return;
         }
 
