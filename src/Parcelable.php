@@ -39,6 +39,18 @@ trait Parcelable
      */
     public function createParcel(string $type = ''): CoreResponse
     {
+        if (
+            $this->carrier_name === 'Zásilkovna'
+            && $this->is_zasilkovna_on_address
+            && !$this->home_delivery_address_id
+        ) {
+            $response = new CoreResponse();
+
+            return $response->fail(
+                'Zásilkovna na adresu není v zemi ' . $this->country . ' nastavená. Změň dopravu a podej znovu.'
+            );
+        }
+
         $type = $type ?: $this->default_parcel_type;
         $response = Parcel::createFrom($this, $type);
 
@@ -139,9 +151,10 @@ trait Parcelable
     }
 
     /**
-     * @return int
+     * Packeta addressId for home delivery. Null when the country has no HD mapping —
+     * callers must fail with a message instead of aborting a 500.
      */
-    public function getHomeDeliveryAddressIdAttribute(): int
+    public function getHomeDeliveryAddressIdAttribute(): ?int
     {
         return match ($this->country) {
             'SK'    => CarrierId::SK_PACKETA_HD->value,
@@ -149,7 +162,8 @@ trait Parcelable
             'AT'    => CarrierId::AT_AUSTRIAN_POST_HD->value,
             'HU'    => CarrierId::HU_HUNGARIAN_POST_HD->value,
             'DE'    => CarrierId::DE_HERMES_HD->value,
-            default => abort(500, 'Home delivery not supported in ' . $this->country),
+            'PL'    => CarrierId::PL_PACKETA_HD->value,
+            default => null,
         };
     }
 
@@ -207,7 +221,12 @@ trait Parcelable
                 'width'  => 142,
                 'height' => 2 + $itemCount * 10,
             ],
-            default => null,
+            # GFT / merch / unknown product formats — same box as BIG
+            default => [
+                'length' => 400,
+                'width'  => 300,
+                'height' => 175 + $itemCount * 25,
+            ],
         };
     }
 

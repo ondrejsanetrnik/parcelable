@@ -5,15 +5,14 @@ namespace Ondrejsanetrnik\Parcelable\enums;
 /**
  * https://pickup-point.api.packeta.com/v5/d3b8401799d472fd/carrier/json?lang=cs
  * Order::whereIn('delivery', ['Zásilkovna', 'Zásilkovna na adresu'])->pluck('carrier_id')->filter()->countBy()->sortDesc()->mapWithKeys(fn($count, $id) => [Ondrejsanetrnik\Parcelable\enums\CarrierId::tryFrom($id)?->name ?? $id => $count])
- *
  */
 enum CarrierId: int
 {
-
     case AT_AUSTRIAN_POST_HD = 80;
     case CZ_PACKETA_HD = 106;
     case SK_PACKETA_HD = 131;
     case PL_INPOST = 3060;
+    case PL_PACKETA_HD = 4162;
     case PL_POCZTA_POLSKA = 14052;
     case HU_FOXPOST_BOX = 32970;
     case DE_HERMES_PP = 6828;
@@ -47,7 +46,6 @@ enum CarrierId: int
     case SI_POST_PP = 19516;
     case FI_MATKAHUOLTO_BOX = 26987;
 
-
     public static function getAllowedIdsForDirectLabelPrinting(): array
     {
         return [
@@ -77,4 +75,3 @@ enum CarrierId: int
         ];
     }
 }
-
