@@ -312,7 +312,7 @@ class Packeta
         $selectedCountryCosts = collect($countryArray);
 
         # Take the first cost that is greater than or equal to the weight
-        $baseCost = $selectedCountryCosts->first(fn($cost, $weightLimit) => $weight <= $weightLimit);
+        $baseCost = $selectedCountryCosts->first(fn($cost, $weightLimit) => $weight <= $weightLimit) ?? 0;
         $dieselSurcharge = $baseCost * 0.05; # 5% diesel surcharge, why do they state 6% in the docs?
 
         if ($parcelable->carrier_id) $tollSurcharge = $dieselSurcharge = 0; # No toll surcharge for external carriers
