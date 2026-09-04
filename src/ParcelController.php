@@ -40,17 +40,39 @@ class ParcelController extends Controller
             return redirect()->back()->with('error', 'Štítek zásilky ve stavu Vrácena obchodu nelze tisknout. Podej nový balík.');
         }
 
-        if (!Storage::disk('private')->exists('labels/' . $parcel->label_name_pdf)) {
-            if ($parcel->carrier == 'Zásilkovna')
-                Packeta::getLabel($parcel->tracking_number, $parcel->parcelable?->carrier_id_inferred);
-            //            elseif ($parcel->carrier == 'GLS')
-            //                Gls::printLabels(Gls::generateJson($par));
-            else {
-                return redirect()->back()->with('error', 'Soubor nenalezen');
-            }
+        $labelKey = 'labels/' . $parcel->label_name_pdf;
+
+        if (!Storage::disk('private')->exists($labelKey)) {
+            $this->refetchMissingLabel($parcel);
+        }
+
+        if (!Storage::disk('private')->exists($labelKey)) {
+            return $this->labelMissingRedirect($parcel);
         }
 
         return response()->download($parcel->label_path, $parcel->label_name_pdf, [], 'inline');
+    }
+
+    private function refetchMissingLabel(Parcel $parcel): void
+    {
+        if ($parcel->carrier !== 'Zásilkovna') {
+            return;
+        }
+
+        Packeta::getLabel((int)$parcel->tracking_number, $parcel->parcelable?->carrier_id_inferred);
+    }
+
+    /**
+     * Do not redirect()->back() — after /send the referer is the submit URL and a retry would create another parcel.
+     */
+    private function labelMissingRedirect(Parcel $parcel): RedirectResponse
+    {
+        $fallbackUrl = $parcel->parcelable?->pack_url ?: url('/');
+
+        return redirect()->to($fallbackUrl)->with(
+            'error',
+            'Štítek zásilky se nepodařilo stáhnout. Zkuste tisk znovu za chvíli, balík u dopravce už existuje.'
+        );
     }
 
     /**

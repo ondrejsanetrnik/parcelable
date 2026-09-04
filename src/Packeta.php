@@ -50,6 +50,10 @@ class Packeta
         'cancelled'                       => 'Stornována',
     ];
 
+    private const LABEL_FETCH_ATTEMPTS = 3;
+
+    private const LABEL_FETCH_RETRY_DELAY_MS = 400;
+
     public static function __callStatic(string $method, array $parameters): CoreResponse
     {
         $response = new CoreResponse();
@@ -209,21 +213,53 @@ class Packeta
         return $response;
     }
 
-    public static function getLabel(int $id, ?int $carrierId = null): void
+    /**
+     * Download the Packeta label PDF. Retries briefly — the API often has no file
+     * in the first second after createPacket, and warehouse opens the print URL immediately.
+     */
+    public static function getLabel(int $id, ?int $carrierId = null): bool
+    {
+        $lastMessage = null;
+
+        for ($attempt = 1; $attempt <= self::LABEL_FETCH_ATTEMPTS; $attempt++) {
+            $response = self::fetchLabelPdf($id, $carrierId);
+            $pdf = $response?->data;
+
+            if ($pdf !== null && $pdf !== '') {
+                if (Storage::disk('private')->put('labels/' . $id . '.pdf', $pdf)) {
+                    return true;
+                }
+
+                $lastMessage = 'Failed to write label PDF to disk';
+            } else {
+                $lastMessage = $response?->message ?? 'Empty label payload';
+            }
+
+            if ($attempt < self::LABEL_FETCH_ATTEMPTS) {
+                usleep(self::LABEL_FETCH_RETRY_DELAY_MS * 1000);
+            }
+        }
+
+        Log::warning('Packeta label PDF missing after retries', [
+            'packet_id'  => $id,
+            'carrier_id' => $carrierId,
+            'message'    => $lastMessage,
+        ]);
+
+        return false;
+    }
+
+    private static function fetchLabelPdf(int $id, ?int $carrierId): CoreResponse
     {
         if (in_array($carrierId, CarrierId::getAllowedIdsForDirectLabelPrinting())) {
             # Label is provided by the external carrier
-            if ($externalCarrierData = self::packetCourierNumberV2($id)->data)
-                $response = self::packetCourierLabelPdf($id, $externalCarrierData->courierNumber);
-            else $response = self::packetLabelPdf($id, config('parcelable.PACKETA_LABEL_FORMAT'), 0);
-        } else {
-            # Label is provided by Packeta
-            $response = self::packetLabelPdf($id, config('parcelable.PACKETA_LABEL_FORMAT'), 0);
+            $externalCarrierData = self::packetCourierNumberV2($id)->data;
+            if ($externalCarrierData) {
+                return self::packetCourierLabelPdf($id, $externalCarrierData->courierNumber);
+            }
         }
 
-        if ($response?->data !== null) {
-            Storage::disk('private')->put('labels/' . $id . '.pdf', $response->data);
-        }
+        return self::packetLabelPdf($id, config('parcelable.PACKETA_LABEL_FORMAT'), 0);
     }
 
     /**
