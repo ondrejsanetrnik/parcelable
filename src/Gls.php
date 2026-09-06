@@ -3,6 +3,8 @@
 namespace Ondrejsanetrnik\Parcelable;
 
 use App\Models\Entity;
+use App\Models\User;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Ondrejsanetrnik\Core\CoreResponse;
@@ -14,33 +16,48 @@ class Gls
         'Delivered To Neighbour'           => 'Doručena',
         'Signed On Paper'                  => 'Doručena',
         'Signature After Delivery'         => 'Doručena',
+        'Vráceno odesílateli'              => 'Vrácena obchodu',
+        'returned'                         => 'Vrácena obchodu',
         'Ostatní data přijata'             => 'Čeká na vyzvednutí kurýrem',
+        'Data sent'                        => 'Čeká na vyzvednutí kurýrem',
         'COD data přijata'                 => 'Čeká na vyzvednutí kurýrem',
         'P&S/P&R na vyzvednutí'            => 'Čeká na vyzvednutí kurýrem',
         'P&S/P&R vytisknut'                => 'Čeká na vyzvednutí kurýrem',
         'Není balík P&S/P&R'               => 'Čeká na vyzvednutí kurýrem',
         'Balík není připraven'             => 'Čeká na vyzvednutí kurýrem',
         'Vyzvednuto'                       => 'Přijata k přepravě',
+        'Successful pick up'               => 'Přijata k přepravě',
         'Registrace'                       => 'V přepravě',
+        'Registrace do přepravy GLS'       => 'V přepravě',
+        'APL-Registration'                 => 'V přepravě',
         'Depo vstup'                       => 'V přepravě',
+        'Přijato na depo'                  => 'V přepravě',
+        'Tranzit na depo'                  => 'V přepravě',
+        'Depot Transit'                    => 'V přepravě',
         'HUB Inbound'                      => 'V přepravě',
         'HUB Outbound'                     => 'V přepravě',
         'HUB Storage'                      => 'V přepravě',
         'Nesprávné PSČ'                    => 'V přepravě',
         'Nesprávné nasměrování na depo'    => 'V přepravě',
         'Small Parcel'                     => 'V přepravě',
+        'Malý balík'                       => 'V přepravě',
         'Depo sklad'                       => 'V přepravě',
+        'Uskladněno na depu'               => 'V přepravě',
+        'Uskladněno na třídicím centru'    => 'V přepravě',
+        'Kontrola'                         => 'V přepravě',
         'Dovolená'                         => 'V přepravě',
         'Depot Re-delivery'                => 'V přepravě',
         'Chybné nasortování na depo'       => 'V přepravě',
         'Překročena kapacita trasy'        => 'V přepravě',
         'Not Systemlike Parcel'            => 'V přepravě',
         'Změna adresy doručení'            => 'V přepravě',
+        'Změna doručovací adresy'          => 'V přepravě',
         'Damaged'                          => 'V přepravě',
         'Nesprávná adresa (neúplná)'       => 'V přepravě',
         'Nesprávná trasa'                  => 'V přepravě',
         'Rollkarte Check'                  => 'V přepravě',
         'Dle nového požadavku'             => 'V přepravě',
+        'Dle požadavku CS'                 => 'V přepravě',
         'Bez údajů'                        => 'V přepravě',
         'Change Of Delivery Address'       => 'V přepravě',
         'Ztracený'                         => 'V přepravě',
@@ -53,20 +70,51 @@ class Gls
         'Technický problém s ParcellBoxem' => 'V přepravě',
         'Warehouse Error'                  => 'V přepravě',
         'Na doručení'                      => 'Doručována',
+        'Probíhá doručování'               => 'Doručována',
+        'Delivery list scan'               => 'Doručována',
         'Pevne urceny den doruceni'        => 'Doručována',
         'adresát nezastižen - oznámení'    => 'Doručována',
+        'Příjemce nezastižen'              => 'Doručována',
         'Nedostatek peněz'                 => 'Doručována',
         'ParcelLocker deposit'             => 'Připravena k vyzvednutí',
         'Doručení do ParcelShopu'          => 'Připravena k vyzvednutí',
         'Uskladněno v ParcelShopu'         => 'Připravena k vyzvednutí',
-        'Zaslání do HUB'                   => 'Na cestě zpátky',
-        'Zpětné zaslání odesílateli'       => 'Na cestě zpátky',
-        'Odmítnutí převzetí balíku'        => 'Na cestě zpátky',
-        'ParcelShop return'                => 'Na cestě zpátky',
-        'Odmítnutí (neobjednaná služba)'   => 'Na cestě zpátky',
-        'P&S/P&R vymazán'                  => 'Stornována',
+        'Připraveno v ParcelShopu'         => 'Připravena k vyzvednutí',
+        'Připraveno v ParcelBoxu'          => 'Připravena k vyzvednutí',
+        'Uskladněno na výdejním místě'     => 'Připravena k vyzvednutí',
+        # Expired locker hold starts the return path, not a fresh delivery attempt.
+        'ParcelLocker - Reservation expired' => 'Na cestě zpátky',
+        'Zaslání do HUB'                     => 'Na cestě zpátky',
+        'Zpětné zaslání odesílateli'         => 'Na cestě zpátky',
+        'Odmítnutí převzetí balíku'          => 'Na cestě zpátky',
+        'Odmítnuto'                          => 'Na cestě zpátky',
+        'ParcelShop return'                  => 'Na cestě zpátky',
+        'Odmítnutí (neobjednaná služba)'     => 'Na cestě zpátky',
+        'Vráceno z výdejního místa'          => 'Na cestě zpátky',
+        'Vráceno na třídicí centrum'         => 'Na cestě zpátky',
+        'P&S/P&R vymazán'                    => 'Stornována',
+    ];
 
-        'returned' => 'Vrácena obchodu',
+    # Sticky history flag for ambiguous depot scans after a real return started.
+    # Do NOT include forward-routing "Zaslání do HUB" — it also appears on outbound parcels.
+    private const RETURN_STATUS_DESCRIPTIONS = [
+        'Zpětné zaslání odesílateli',
+        'Vráceno odesílateli',
+        'ParcelShop return',
+        'Odmítnutí převzetí balíku',
+        'Odmítnutí (neobjednaná služba)',
+        'Odmítnuto',
+        'Vráceno z výdejního místa',
+        'Vráceno na třídicí centrum',
+    ];
+
+    # Only these mapped states get rewritten by the sticky return flag.
+    # Leave pickup / out-for-delivery / terminal alone (refusal → redelivery stays correct).
+    private const RETURN_STICKY_OVERRIDE_STATUSES = [
+        'V přepravě',
+        'Přijata k přepravě',
+        'Čeká na vyzvednutí kurýrem',
+        'Doručena',
     ];
 
     public const URL = 'https://api.mygls.cz/ParcelService.svc/json/';
@@ -322,7 +370,6 @@ class Gls
         if (!is_int($parcelNumber)) {
             $parcelNumber = intval(ltrim($parcelNumber, 'Zz'));
         }
-        // intval(ltrim($parcelNumber, 'Zz'))
         $request = '{"Username":"' . config('parcelable.GLS_USERNAME') . '","Password":' . self::hashPassword() . ',"ParcelNumber":' . $parcelNumber . ',"ReturnPOD":false,"LanguageIsoCode":"CS"}';
         $response = self::getResponse(self::URL, 'GetParcelStatuses', $request);
 
@@ -330,43 +377,98 @@ class Gls
 
             if (!$response->data) {
                 Log::channel('separated')->warning('GLS parcel status has empty data!', [
-                    'response' => json_encode($response),
+                    'parcelNumber' => $parcelNumber,
+                    'response'     => json_encode($response),
                 ]);
+
+                return $response->fail('GLS nevrátilo data ke stavu zásilky.');
             }
 
             $statuses = collect($response->data->ParcelStatusList);
 
-            //            foreach ($statuses as $statusObject) {
-            //                if (!array_key_exists($statusObject->StatusDescription, self::STATUS_MAP))
-            //                    Log::warning('GLS status not recognized: ' . $statusObject->StatusDescription);
-            //            }
-
-            $currentStatusDescription = $statuses[0]?->StatusDescription;
+            $currentStatusDescription = (string)($statuses[0]?->StatusDescription ?? '');
             $statusMap = self::STATUS_MAP;
 
-            if ($statuses->where('StatusDescription', 'P&S/P&R na vyzvednutí')->count()) {
-                # The parcel is a return, adresát nezastižen - oznámení means the parcel was still not yet picked up
+            $isReversePickup = $statuses->where('StatusDescription', 'P&S/P&R na vyzvednutí')->isNotEmpty();
+            if ($isReversePickup) {
+                # Reverse-pickup parcel: "adresát nezastižen" still means waiting for courier pickup
                 $statusMap['adresát nezastižen - oznámení'] = 'Čeká na vyzvednutí kurýrem';
+                $statusMap['Příjemce nezastižen'] = 'Čeká na vyzvednutí kurýrem';
             }
 
-            $status = $statusMap[$currentStatusDescription] ?? 'V přepravě';
-
-            if (
-                $statuses->where('StatusDescription', 'Zpětné zaslání odesílateli')->count() &&
-                $status == 'Doručena'
-            ) {
-                # The parcel was refused and is on its way back, the delivered now means returned to sender -.-
-                $status = 'Vrácena obchodu';
-            }
-
+            $events = ParcelTrackingEvents::fromGlsStatusList($statuses);
             $statusObject = (object)[
-                'status' => $status,
+                'raw_status' => $currentStatusDescription !== '' ? $currentStatusDescription : null,
+                'events'     => $events,
             ];
 
+            if ($currentStatusDescription === '' || !array_key_exists($currentStatusDescription, $statusMap)) {
+                # Leave status unset so Parcel::updateStatus keeps the previous known value
+                self::notifyUnknownStatus($currentStatusDescription, $parcelNumber);
+                $response->setData($statusObject);
+
+                return $response;
+            }
+
+            $status = $statusMap[$currentStatusDescription];
+
+            # Sticky return: only for reverse-forward parcels with ambiguous depot/"delivered" scans.
+            # Skip reverse-pickup (P&S/P&R) — history always looks like a return.
+            if (!$isReversePickup && self::statusesContainReturn($statuses)) {
+                if ($status === 'Doručena') {
+                    $status = 'Vrácena obchodu';
+                } elseif (in_array($status, self::RETURN_STICKY_OVERRIDE_STATUSES, true)) {
+                    $status = 'Na cestě zpátky';
+                }
+            }
+
+            $statusObject->status = $status;
             $response->setData($statusObject);
         }
 
         return $response;
+    }
+
+    /**
+     * @param \Illuminate\Support\Collection<int, object> $statuses
+     */
+    private static function statusesContainReturn($statuses): bool
+    {
+        return $statuses->contains(
+            fn($status): bool => in_array(
+                (string)($status->StatusDescription ?? ''),
+                self::RETURN_STATUS_DESCRIPTIONS,
+                true,
+            ),
+        );
+    }
+
+    /**
+     * Log + Slack (once per day per code) when GLS returns an unmapped status.
+     */
+    protected static function notifyUnknownStatus(string $statusDescription, int|string $parcelNumber): void
+    {
+        Log::channel('separated')->warning('GLS status not recognized', [
+            'status'       => $statusDescription,
+            'parcelNumber' => $parcelNumber,
+        ]);
+
+        $cacheKey = 'gls-unknown-status:' . ($statusDescription !== '' ? $statusDescription : 'empty');
+        if (!Cache::add($cacheKey, true, now()->addDay())) {
+            return;
+        }
+
+        try {
+            User::find(1)?->sendSlackMessage(
+                "⚠️ GLS: neznámý stav zásilky `{$statusDescription}` (parcel {$parcelNumber})."
+                . ' Doplň mapování v Gls::STATUS_MAP.'
+            );
+        } catch (\Throwable $e) {
+            Log::warning('Failed to send GLS unknown status Slack notification', [
+                'error'  => $e->getMessage(),
+                'status' => $statusDescription,
+            ]);
+        }
     }
 
     public static function getCostFor(ParcelableContract $parcelable): float

@@ -94,7 +94,13 @@ class Packeta
         $response = self::packetTracking($parcelNumber);
 
         if ($response->success) {
-            $lastStatusObject = is_array($response->data->record) ? end($response->data->record) : $response->data->record;
+            $records = $response->data->record ?? [];
+            if (!is_array($records)) {
+                $records = [$records];
+            }
+
+            $lastStatusObject = end($records) ?: (object)[];
+            $events = ParcelTrackingEvents::fromPacketaRecords($records);
 
             $codeText = (string)($lastStatusObject->codeText ?? '');
             $mappedStatus = self::STATUS_MAP[$codeText] ?? null;
@@ -106,10 +112,12 @@ class Packeta
                 $lastStatusObject->status = $mappedStatus;
             }
 
-            $lastStatusObject->external_tracking_number = collect($response->data->record)
+            $lastStatusObject->external_tracking_number = collect($records)
                 ->pluck('externalTrackingCode')
                 ->filter()
                 ->first() ?: null;
+            $lastStatusObject->events = $events;
+            $lastStatusObject->raw_status = $codeText !== '' ? $codeText : null;
 
             $response->data = $lastStatusObject;
         }

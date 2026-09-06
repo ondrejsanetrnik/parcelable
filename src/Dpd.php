@@ -48,26 +48,26 @@ class Dpd
     private const DELIVERED_STATUS_CODE = '13';
 
     public const STATUS_MAP = [
-        'Parcel is delivered to recipient'              => 'Doručena',
-        'Parcel is delivered to consignee'              => 'Doručena',
-        'Delivered'                                     => 'Doručena',
+        'Parcel is delivered to recipient'                    => 'Doručena',
+        'Parcel is delivered to consignee'                    => 'Doručena',
+        'Delivered'                                           => 'Doručena',
         'Parcel was picked up by consignee from Pickup point' => 'Doručena',
-        'Parcel picked up by delivery driver'           => 'Doručována',
-        'Parcel has been given additional information'  => 'V přepravě',
-        'Accepted on delivery Depot'                    => 'V přepravě',
-        'Parcel is scanned on hub'                      => 'V přepravě',
-        'Parcel accepted on dispatch depot from driver' => 'Přijata k přepravě',
-        'Parcel accepted on dispatch depot'             => 'Přijata k přepravě',
-        'Předáno příjemci'                              => 'Doručena',
-        'Předáno do rukou'                              => 'Doručena',
-        'Zásilka doručena'                              => 'Doručena',
-        'Zásilka doručena příjemci'                     => 'Doručena',
-        'Ready for return to The courier'               => 'Na cestě zpátky',
-        'Returned to The courier'                       => 'Na cestě zpátky',
-        'Parcel is returned to sender'                  => 'Na cestě zpátky',
-        'Returning to Sender'                           => 'Na cestě zpátky',
-        'Returned to Sender'                            => 'Na cestě zpátky',
-        'Vráceno odesílateli'                           => 'Na cestě zpátky',
+        'Parcel picked up by delivery driver'                 => 'Doručována',
+        'Parcel has been given additional information'        => 'V přepravě',
+        'Accepted on delivery Depot'                          => 'V přepravě',
+        'Parcel is scanned on hub'                            => 'V přepravě',
+        'Parcel accepted on dispatch depot from driver'       => 'Přijata k přepravě',
+        'Parcel accepted on dispatch depot'                   => 'Přijata k přepravě',
+        'Předáno příjemci'                                    => 'Doručena',
+        'Předáno do rukou'                                    => 'Doručena',
+        'Zásilka doručena'                                    => 'Doručena',
+        'Zásilka doručena příjemci'                           => 'Doručena',
+        'Ready for return to The courier'                     => 'Na cestě zpátky',
+        'Returned to The courier'                             => 'Na cestě zpátky',
+        'Parcel is returned to sender'                        => 'Na cestě zpátky',
+        'Returning to Sender'                                 => 'Na cestě zpátky',
+        'Returned to Sender'                                  => 'Na cestě zpátky',
+        'Vráceno odesílateli'                                 => 'Na cestě zpátky',
     ];
 
     # Match by description only — DPD reuses numeric codes (e.g. 6 vs 06) for unrelated events.
@@ -529,9 +529,12 @@ class Dpd
         }
 
         $mapped = self::mapStatusFromParcelEvents($events, $parcelNumber);
+        $trackingEvents = ParcelTrackingEvents::fromDpdParcelEvents($events);
 
         $statusObject = (object)[
-            'status' => $mapped,
+            'status'     => $mapped,
+            'raw_status' => $trackingEvents[0]['description'] ?? null,
+            'events'     => $trackingEvents,
         ];
 
         return $response->success($statusObject);
@@ -547,7 +550,20 @@ class Dpd
      */
     public static function mapStatusFromParcelEvents(array $events, ?string $parcelNumber = null): string
     {
-        usort($events, fn($a, $b) => strcmp($b['createdAt'] ?? '', $a['createdAt'] ?? ''));
+        usort($events, function ($a, $b): int {
+            try {
+                $aTs = \Carbon\Carbon::parse((string)($a['createdAt'] ?? ''))->getTimestamp();
+            } catch (\Throwable) {
+                $aTs = 0;
+            }
+            try {
+                $bTs = \Carbon\Carbon::parse((string)($b['createdAt'] ?? ''))->getTimestamp();
+            } catch (\Throwable) {
+                $bTs = 0;
+            }
+
+            return $bTs <=> $aTs;
+        });
 
         $latest = $events[0] ?? [];
         $desc = self::normalizeEventDescription($latest['status']['description'] ?? '');
@@ -571,11 +587,16 @@ class Dpd
         }
 
         # DPD often labels return-to-sender handover as "delivered to recipient" (code 13).
+        # Only rewrite ambiguous transit / delivered states — leave pickup & out-for-delivery alone.
         if ($mapped === 'Doručena') {
             return 'Vrácena obchodu';
         }
 
-        return 'Na cestě zpátky';
+        if (in_array($mapped, ['V přepravě', 'Přijata k přepravě', 'Čeká na vyzvednutí kurýrem'], true)) {
+            return 'Na cestě zpátky';
+        }
+
+        return $mapped;
     }
 
     /**
