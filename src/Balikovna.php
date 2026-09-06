@@ -13,14 +13,14 @@ class Balikovna
     public const STATUS_MAP = [
         'Obdrženy údaje k zásilce.'    => 'Čeká na vyzvednutí kurýrem',
         'převzata do přepravy.'        => 'Přijata k přepravě',
-        'Přeprava zásilky.'            => 'V přeprave',
-        'Zásilka v přepravě.'          => 'V přeprave',
+        'Přeprava zásilky.'            => 'V přepravě',
+        'Zásilka v přepravě.'          => 'V přepravě',
         'Zásilka uložena v Balíkovně.' => 'Připravena k vyzvednutí',
         'uložení zásilky'              => 'Připravena k vyzvednutí',
-        'blížící se konec úložní doby' => 'blížící se konec úložní doby',
-        'Zásilka byla vyzvednuta.'     => 'Vyzvednuto',
+        'blížící se konec úložní doby' => 'Připravena k vyzvednutí',
+        'Zásilka byla vyzvednuta.'     => 'Doručena',
         'Odeslání zásilky zpět'        => 'Na cestě zpátky',
-        'Vrácení zásilky odesílateli.' => 'Vráceno odesílateli',
+        'Vrácení zásilky odesílateli.' => 'Vrácena obchodu',
     ];
 
     /**
@@ -273,16 +273,15 @@ class Balikovna
 
             $statuses = collect($parcelDetail->parcelStatuses ?? []);
 
-            $statusText = '';
+            # Newest event first — parcelStatuses is chronological ascending
+            $statusText = null;
 
-            foreach ($statuses as $status) {
+            foreach ($statuses->reverse() as $status) {
                 $status = (object)$status;
 
                 foreach (static::STATUS_MAP as $keyword => $mappedStatus) {
                     if (str_contains($status->text ?? '', $keyword)) {
                         $statusText = $mappedStatus;
-                        // Remove the `break 2` if you want the LAST matching keyword
-                        // Keep it if you want the FIRST one (current behavior)
                         break 2;
                     }
                 }
@@ -317,7 +316,7 @@ class Balikovna
         // Normalize response->data to object (your CoreResponse probably expects object)
         $response->data = (object)[
             'originalStatus' => $originalOverallStatus,
-            'status'         => $firstItem->status ?? '',
+            'status'         => $firstItem->status ?? null,
             'storedUntil'    => $firstItem->storedUntil ?? null,
             'events'         => $firstItem->events ?? [],
             'raw_status'     => $firstItem->raw_status ?? null,

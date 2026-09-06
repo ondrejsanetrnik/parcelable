@@ -77,7 +77,8 @@ final class ParcelTrackingEvents
             $at = isset($record->dateTime) ? (string)$record->dateTime : null;
             if ($at !== null && $at !== '' && !str_contains($at, '+') && !str_ends_with($at, 'Z')) {
                 try {
-                    $at = Carbon::parse($at, config('app.timezone'))->toIso8601String();
+                    # Packeta returns naive Prague local times
+                    $at = Carbon::parse($at, 'Europe/Prague')->toIso8601String();
                 } catch (\Throwable) {
                     # keep raw
                 }
@@ -100,7 +101,12 @@ final class ParcelTrackingEvents
      */
     public static function fromDpdParcelEvents(array $events): array
     {
-        usort($events, fn($a, $b) => strcmp((string)($b['createdAt'] ?? ''), (string)($a['createdAt'] ?? '')));
+        usort($events, function ($a, $b): int {
+            $aTs = self::timestampFromCarrierAt($a['createdAt'] ?? null);
+            $bTs = self::timestampFromCarrierAt($b['createdAt'] ?? null);
+
+            return $bTs <=> $aTs;
+        });
 
         $rows = [];
         foreach ($events as $event) {
@@ -130,7 +136,7 @@ final class ParcelTrackingEvents
         foreach ($statuses as $status) {
             $status = (object)$status;
             $rows[] = [
-                'at'          => self::nullableString($status->date ?? $status->dateTime ?? null),
+                'at'          => self::normalizeBalikovnaAt($status->date ?? $status->dateTime ?? null),
                 'description' => (string)($status->text ?? $status->name ?? ''),
                 'place'       => self::nullableString($status->postOffice ?? $status->place ?? null),
                 'code'        => self::nullableString($status->id ?? $status->code ?? null),
@@ -150,7 +156,49 @@ final class ParcelTrackingEvents
             return null;
         }
 
-        return Carbon::createFromTimestampMs((int)$matches[1])->toIso8601String();
+        $digits = $matches[1];
+        $ts = (int)$digits;
+
+        # .NET /Date(ms)/ uses milliseconds; short payloads may be seconds
+        return strlen($digits) >= 12
+            ? Carbon::createFromTimestampMs($ts)->toIso8601String()
+            : Carbon::createFromTimestamp($ts)->toIso8601String();
+    }
+
+    private static function normalizeBalikovnaAt(mixed $value): ?string
+    {
+        $string = self::nullableString($value);
+        if ($string === null) {
+            return null;
+        }
+
+        try {
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $string) === 1) {
+                return Carbon::parse($string, 'Europe/Prague')->startOfDay()->toIso8601String();
+            }
+
+            if (!str_contains($string, '+') && !str_ends_with($string, 'Z')) {
+                return Carbon::parse($string, 'Europe/Prague')->toIso8601String();
+            }
+
+            return Carbon::parse($string)->toIso8601String();
+        } catch (\Throwable) {
+            return $string;
+        }
+    }
+
+    private static function timestampFromCarrierAt(mixed $value): int
+    {
+        $string = self::nullableString($value);
+        if ($string === null) {
+            return 0;
+        }
+
+        try {
+            return Carbon::parse($string)->getTimestamp();
+        } catch (\Throwable) {
+            return 0;
+        }
     }
 
     private static function nullableString(mixed $value): ?string

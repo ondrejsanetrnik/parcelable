@@ -550,7 +550,20 @@ class Dpd
      */
     public static function mapStatusFromParcelEvents(array $events, ?string $parcelNumber = null): string
     {
-        usort($events, fn($a, $b) => strcmp($b['createdAt'] ?? '', $a['createdAt'] ?? ''));
+        usort($events, function ($a, $b): int {
+            try {
+                $aTs = \Carbon\Carbon::parse((string)($a['createdAt'] ?? ''))->getTimestamp();
+            } catch (\Throwable) {
+                $aTs = 0;
+            }
+            try {
+                $bTs = \Carbon\Carbon::parse((string)($b['createdAt'] ?? ''))->getTimestamp();
+            } catch (\Throwable) {
+                $bTs = 0;
+            }
+
+            return $bTs <=> $aTs;
+        });
 
         $latest = $events[0] ?? [];
         $desc = self::normalizeEventDescription($latest['status']['description'] ?? '');
@@ -574,11 +587,16 @@ class Dpd
         }
 
         # DPD often labels return-to-sender handover as "delivered to recipient" (code 13).
+        # Only rewrite ambiguous transit / delivered states — leave pickup & out-for-delivery alone.
         if ($mapped === 'Doručena') {
             return 'Vrácena obchodu';
         }
 
-        return 'Na cestě zpátky';
+        if (in_array($mapped, ['V přepravě', 'Přijata k přepravě', 'Čeká na vyzvednutí kurýrem'], true)) {
+            return 'Na cestě zpátky';
+        }
+
+        return $mapped;
     }
 
     /**

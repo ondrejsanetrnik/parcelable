@@ -187,22 +187,33 @@ class Parcel extends Entity
             $response = $this->carrierClass::getParcelStatus($this->tracking_number);
         }
 
-        # Persist if successful — skip null status so an unmapped carrier code cannot wipe a known state
+        # Persist if successful — skip empty/null status so an unmapped carrier code cannot wipe a known state
         if ($response->success && $response->data) {
-            $attributes = [
-                'stored_until'             => $response->data->storedUntil ?? null,
-                'external_tracking_number' => $response->data->external_tracking_number ?? null,
-            ];
+            $attributes = [];
 
-            if (isset($response->data->status)) {
+            if (property_exists($response->data, 'storedUntil')) {
+                $attributes['stored_until'] = $response->data->storedUntil;
+            }
+
+            if (property_exists($response->data, 'external_tracking_number')) {
+                $attributes['external_tracking_number'] = $response->data->external_tracking_number;
+            }
+
+            if (filled($response->data->status ?? null)) {
                 $attributes['status'] = $response->data->status;
             }
 
             $this->fill($attributes);
-            # Always bump updated_at so MCP stale_after reflects the last carrier fetch,
-            # even when the mapped status string did not change.
-            $this->updated_at = now();
-            $this->save();
+
+            if ($this->isDirty()) {
+                $this->save();
+            } else {
+                # Touch fetched_at semantics for MCP stale_after without firing model events
+                $now = now();
+                $this->newQuery()->whereKey($this->getKey())->update(['updated_at' => $now]);
+                $this->updated_at = $now;
+                $this->syncOriginalAttribute('updated_at');
+            }
         }
 
         return $response;
