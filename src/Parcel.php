@@ -198,7 +198,11 @@ class Parcel extends Entity
                 $attributes['status'] = $response->data->status;
             }
 
-            $this->update($attributes);
+            $this->fill($attributes);
+            # Always bump updated_at so MCP stale_after reflects the last carrier fetch,
+            # even when the mapped status string did not change.
+            $this->updated_at = now();
+            $this->save();
         }
 
         return $response;

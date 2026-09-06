@@ -10,7 +10,6 @@ use Ondrejsanetrnik\Core\CoreResponse;
 
 class Balikovna
 {
-
     public const STATUS_MAP = [
         'Obdrženy údaje k zásilce.'    => 'Čeká na vyzvednutí kurýrem',
         'převzata do přepravy.'        => 'Přijata k přepravě',
@@ -28,13 +27,13 @@ class Balikovna
      * url of napi https://www.ceskaposta.cz/napi/b2b
      */
 
-
     /**
      * Function to send POST request by default to the specified endpoint with the given data.
      *
      * @param string $endpoint The API endpoint.
      * @param array $data The data to send in the request.
      * @return array The decoded JSON response.
+     *
      * @throws Exception If there is a CURL error.
      */
     public static function getResponse($endpoint, $data = null, $method = 'POST')
@@ -82,7 +81,7 @@ class Balikovna
         $base64Signature = base64_encode($signature);
 
         // Log the timestamp for debugging purposes
-//        Log::info('timestamp ' . $timestamp);
+        //        Log::info('timestamp ' . $timestamp);
 
         // Step 4: Set the headers for the request
         $headers = [
@@ -98,17 +97,17 @@ class Balikovna
         if ($method === 'POST') {
             curl_setopt($ch, CURLOPT_POST, 1);
             curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
-        } else if ($method === 'GET') {
+        } elseif ($method === 'GET') {
             curl_setopt($ch, CURLOPT_HTTPGET, 1);
         }
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 
         // Disable SSL verification for test environment
-//        if (\App::isLocal()) {
+        //        if (\App::isLocal()) {
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-//        }
+        //        }
 
         // Step 5: Execute the request
         $balikovnaResponse = curl_exec($ch);
@@ -129,7 +128,7 @@ class Balikovna
         } else {
             if (\App::isLocal()) {
                 $balikovnaObject = (object)[
-                    'detail'      => [
+                    'detail' => [
                         (object)[
                             'idParcel'             => 'NB5847769990L',
                             'parcelType'           => 'NB',
@@ -224,7 +223,6 @@ class Balikovna
      * @param string $language Language for the displayed events.
      * @return array The response from the API.
      */
-
     public static function getParcelStatus(array|string $parcelIds, string $language = 'CZ'): CoreResponse
     {
         if (!is_array($parcelIds)) {
@@ -265,6 +263,7 @@ class Balikovna
                 'parcelIds'    => $parcelIds,
                 'raw_response' => $data,
             ]);
+
             return $response->fail('No parcel details returned from Balíkovna API.');
         }
 
@@ -289,9 +288,16 @@ class Balikovna
                 }
             }
 
+            $rawLast = $statuses->last();
+            $rawLast = $rawLast !== null ? (object)$rawLast : null;
+
             return (object)[
                 'status'      => $statusText,
                 'storedUntil' => $parcelDetail->depositTo ?? null,
+                'events'      => ParcelTrackingEvents::fromBalikovnaStatuses($statuses),
+                'raw_status'  => $rawLast !== null
+                    ? trim((string)($rawLast->text ?? $rawLast->name ?? '')) ?: null
+                    : null,
             ];
         });
 
@@ -313,9 +319,9 @@ class Balikovna
             'originalStatus' => $originalOverallStatus,
             'status'         => $firstItem->status ?? '',
             'storedUntil'    => $firstItem->storedUntil ?? null,
+            'events'         => $firstItem->events ?? [],
+            'raw_status'     => $firstItem->raw_status ?? null,
             'detail'         => $processedData->toArray(), // optional: keep processed details
-            // you can keep any other original fields if needed:
-            // ... (array) $data,
         ];
 
         $response->success = true;
@@ -376,6 +382,7 @@ class Balikovna
                 } else {
                     dd($response);
                     $response->fail(collect($response->data?->responseHeader?->resultParcelData[0]?->parcelStateResponse)->implode('responseText', ', '));
+
                     return $response;
                 }
             }
@@ -387,6 +394,7 @@ class Balikovna
 
             // Return the parcel codes and the response
             $protoParcels = array_map(fn($parcelCode) => (object)['id' => $parcelCode], $parcelCodes);
+
             return $response->success($protoParcels);
 
         } else {
@@ -409,6 +417,7 @@ class Balikovna
                 $protoParcel = (object)[
                     'id' => $parcelCode,
                 ];
+
                 return $response->success([$protoParcel]);
             } else {
                 dd($response);
@@ -428,7 +437,7 @@ class Balikovna
         $disk = 'private';
 
         // Debugging: Log the disk and file name being used
-//        Log::info("Saving label to disk: {$disk}, file name: {$fileName}.pdf");
+        //        Log::info("Saving label to disk: {$disk}, file name: {$fileName}.pdf");
 
         // Save the decoded label to a file
         $saved = Storage::disk($disk)->put('labels/' . $fileName . '.pdf', $decodedLabel);
@@ -438,7 +447,7 @@ class Balikovna
             Log::error("Failed to save label as PDF: {$fileName}.pdf");
             throw new \Exception("Failed to save label as PDF: {$fileName}.pdf");
         } else {
-//            Log::info("Label saved successfully as: labels/{$fileName}.pdf");
+            //            Log::info("Label saved successfully as: labels/{$fileName}.pdf");
         }
     }
 
@@ -460,7 +469,7 @@ class Balikovna
         }
     }
 
-    public static function generateJson(Entity $entity, int $formID = null, int $position = 1): string
+    public static function generateJson(Entity $entity, ?int $formID = null, int $position = 1): string
     {
         $config = static::getConfig();
         $customerID = $config['BALIKOVNA_CUSTOMER_ID'];
@@ -475,23 +484,23 @@ class Balikovna
 
         // Prepare parcelParams
         $parcelParams = [
-            'weight'           => $entity->is_balikovna_on_address == 1
+            'weight' => $entity->is_balikovna_on_address == 1
                 ? strval(round(min($entity->width / 50, 29), 3))  // Max limit 30 if is_balikovna_on_address is 1
                 : strval(round(min($entity->width / 50, 14), 3)), // Max limit 14 otherwise
             'prefixParcelCode' => $entity->is_balikovna_on_address == 1 ? 'DR' : 'NB', // Prefix for parcel code
             'recordID'         => strval($entity->id), // internal ID
             'insuredValue'     => $entity->total * 2, // insurance, double the price of goods
             'note'             => $entity->note ?? '', // internal note for the parcel
-            'notePrint'        => "" . $entity->id ?? '', // for the label
+            'notePrint'        => '' . $entity->id ?? '', // for the label
         ];
 
-//        if ($entity->parcel_count > 1) {
-//            $parcelParams['sequenceParcel'] = 1; // sequence number of the parcel, must for service 70 (multi)
-//            $parcelParams['quantityParcel'] = $entity->parcel_count; // quantity of parcels, must for service 70 (multi)
-//        }
+        //        if ($entity->parcel_count > 1) {
+        //            $parcelParams['sequenceParcel'] = 1; // sequence number of the parcel, must for service 70 (multi)
+        //            $parcelParams['quantityParcel'] = $entity->parcel_count; // quantity of parcels, must for service 70 (multi)
+        //        }
 
         $parcelServices = [
-            static::determineParcelSize($entity), //nejdřív sen nevěděl co to je, nutné jen u balíkovny na adresu
+            static::determineParcelSize($entity), // nejdřív sen nevěděl co to je, nutné jen u balíkovny na adresu
             //             {#6612
             //                 +"responseCode": 261,
             //                +"responseText": "MISSING_SIZE_CATEGORY",
@@ -514,14 +523,14 @@ class Balikovna
                     'postCode'         => $postCode,   // Using the passed parameter
                     'locationNumber'   => $locationNumber, // Using the passed parameter
                 ],
-                'printParams'            => [
+                'printParams' => [
                     'idForm'          => $formID, // Using the passed parameter
                     'shiftHorizontal' => 0,
                     'shiftVertical'   => 0,
                 ],
-                'position'               => $position, // Using the passed parameter
+                'position' => $position, // Using the passed parameter
             ],
-            'parcelServiceData'   => [
+            'parcelServiceData' => [
                 'parcelParams'   => $parcelParams,
                 'parcelServices' => $parcelServices,
                 'parcelAddress'  => $parcelAddress,
@@ -529,45 +538,45 @@ class Balikovna
         ];
         // If multi-part parcel, add multipart data
 
-//        if ($entity->parcel_count > 1) {
-//            dump($entity->parcel_count);
-//
-//            foreach (range(1, $entity->parcel_count) as $i) {
-//                $array['multipartParcelData'][] = [
-//                    'addParcelData'         => [
-//                        'recordID'         => $entity->id . '/' . $i,
-//                        // Unique record ID for this parcel
-//                        'prefixParcelCode' => $entity->is_balikovna_on_address == 1 ? 'DR' : 'NB',
-//                        // Prefix based on address
-//                        'weight'           => strval(min($entity->width / 20 / $entity->parcel_count, 49)),
-//                        // Set weight for the new parcel
-//                        'sequenceParcel'   => $i,
-//                        // Sequence number of this parcel
-//                        'quantityParcel'   => $entity->parcel_count,
-//                        // Total number of parcels in this multi-part shipment
-//                    ],
-//                    'addParcelDataServices' => [
-//                        '70', // Service code for multi-part parcel
-//                        static::determineParcelSize($entity, $entity->parcel_count), // Size of this parcel
-//                    ],
-//                ];
-//            }
-//        }
+        //        if ($entity->parcel_count > 1) {
+        //            dump($entity->parcel_count);
+        //
+        //            foreach (range(1, $entity->parcel_count) as $i) {
+        //                $array['multipartParcelData'][] = [
+        //                    'addParcelData'         => [
+        //                        'recordID'         => $entity->id . '/' . $i,
+        //                        // Unique record ID for this parcel
+        //                        'prefixParcelCode' => $entity->is_balikovna_on_address == 1 ? 'DR' : 'NB',
+        //                        // Prefix based on address
+        //                        'weight'           => strval(min($entity->width / 20 / $entity->parcel_count, 49)),
+        //                        // Set weight for the new parcel
+        //                        'sequenceParcel'   => $i,
+        //                        // Sequence number of this parcel
+        //                        'quantityParcel'   => $entity->parcel_count,
+        //                        // Total number of parcels in this multi-part shipment
+        //                    ],
+        //                    'addParcelDataServices' => [
+        //                        '70', // Service code for multi-part parcel
+        //                        static::determineParcelSize($entity, $entity->parcel_count), // Size of this parcel
+        //                    ],
+        //                ];
+        //            }
+        //        }
 
-        //'multipartParcelData' => [],  // Adjust multipart data if necessary
-        //příklad, chápu to jako "podat další" // musí mít service 70, první zásilka je jako hlavní
+        // 'multipartParcelData' => [],  // Adjust multipart data if necessary
+        // příklad, chápu to jako "podat další" // musí mít service 70, první zásilka je jako hlavní
         // pak jen dopřidat data dal3ích zásilek do jsonu + sequence parcel a quantity parcel
-//            {"addParcelData":{"recordID":"2","prefixParcelCode":"DR","weight":"1.20","sequenceParcel":2,"quantityParcel":4},"addParcelDataServices":["70","M"]},{"addParcelData":{"recordID":"3","prefixParcelCode":"DR","weight":"2.20","sequenceParcel":3,"quantityParcel":4},"addParcelDataServices":["70","M"]},{"addParcelData":{"recordID":"4","prefixParcelCode":"DR","weight":"3.20","sequenceParcel":4,"quantityParcel":4},"addParcelDataServices":["70","M"]}
+        //            {"addParcelData":{"recordID":"2","prefixParcelCode":"DR","weight":"1.20","sequenceParcel":2,"quantityParcel":4},"addParcelDataServices":["70","M"]},{"addParcelData":{"recordID":"3","prefixParcelCode":"DR","weight":"2.20","sequenceParcel":3,"quantityParcel":4},"addParcelDataServices":["70","M"]},{"addParcelData":{"recordID":"4","prefixParcelCode":"DR","weight":"3.20","sequenceParcel":4,"quantityParcel":4},"addParcelDataServices":["70","M"]}
         //            Vícekusá zásilka - služba 70
-        //první zásilka je hlavní zásilka
-        //zásilky ve vícekusu musí následovat v jednom requestu po sobě
-        //u každé zásilky musí být uvedena služba 70
-        //u každé zásilky se uvede element quantityParcel, který značí celkový počet zásilek vícekusu
-        //u každé zásilky se uvede element sequenceParcel, který značí pořadí zásilky, to je například u první zásilky 1 ze tří, u druhé zásilky 2 ze tří, u třetí 3 ze tří. Vypisuje se pouze hodnota, čili 1 – 5.
-        //u každé zásilky uvést její hmotnost a velikost
-        //udanou cenu a dobírku vypsat pouze u hlavní zásilky
-        //maximální počet zásilek ve vícekusu je 5
-//        ];
+        // první zásilka je hlavní zásilka
+        // zásilky ve vícekusu musí následovat v jednom requestu po sobě
+        // u každé zásilky musí být uvedena služba 70
+        // u každé zásilky se uvede element quantityParcel, který značí celkový počet zásilek vícekusu
+        // u každé zásilky se uvede element sequenceParcel, který značí pořadí zásilky, to je například u první zásilky 1 ze tří, u druhé zásilky 2 ze tří, u třetí 3 ze tří. Vypisuje se pouze hodnota, čili 1 – 5.
+        // u každé zásilky uvést její hmotnost a velikost
+        // udanou cenu a dobírku vypsat pouze u hlavní zásilky
+        // maximální počet zásilek ve vícekusu je 5
+        //        ];
 
         return json_encode($array, JSON_UNESCAPED_UNICODE);
     }
@@ -579,7 +588,7 @@ class Balikovna
      *
      * @param string $json The original JSON string representing the parcel data.
      * @param Entity $entity The entity representing the parcel details (e.g., weight, size).
-     * @return string        The updated JSON string with the new parcel added.
+     * @return string The updated JSON string with the new parcel added.
      */
     public static function addParcelToJson(string $json, Entity $entity): string
     {
@@ -610,16 +619,16 @@ class Balikovna
         $data['multipartParcelData'] = [];
         for ($i = 2; $i <= $totalParcels; $i++) {
             $data['multipartParcelData'][] = [
-                'addParcelData'         => [
-                    'recordID'         => $entity->id . '/' . $i,
+                'addParcelData' => [
+                    'recordID' => $entity->id . '/' . $i,
                     // Unique record ID for this parcel
                     'prefixParcelCode' => $entity->is_balikovna_on_address == 1 ? 'DR' : 'NB',
                     // Prefix based on address
-                    'weight'           => $weightPerParcel,
+                    'weight' => $weightPerParcel,
                     // Set weight for the parcel
-                    'sequenceParcel'   => $i,
+                    'sequenceParcel' => $i,
                     // Sequence number of this parcel
-                    'quantityParcel'   => $totalParcels,
+                    'quantityParcel' => $totalParcels,
                     // Total number of parcels in this multi-part shipment
                 ],
                 'addParcelDataServices' => [
@@ -651,22 +660,22 @@ class Balikovna
         // If balikovna is on the address, use the order address directly
         if ($entity?->is_balikovna_on_address == 1) {
             return [
-                'firstName'      => $entity->firstName,
-                'surname'        => $entity->lastName,
-                'company'        => $entity->billing_company ?? '',
+                'firstName' => $entity->firstName,
+                'surname'   => $entity->lastName,
+                'company'   => $entity->billing_company ?? '',
                 // neptaj se na ičo ? nikde
                 'aditionAddress' => $entity?->address_info ?? '',
                 // Doplňující informace k názvu adresát - Informace budou vytištěny na štítku
-                'address'        => [
+                'address' => [
                     'street'     => $entity->street,
                     'city'       => $entity->city,
                     'zipCode'    => $entity->postal_code,
                     'isoCountry' => $entity->country,
                 ],
-                'mobilNumber'    => $phone,
-                'phoneNumber'    => $phone,
-                'emailAddress'   => $entity->email,
-                'subject'        => !empty($entity->billing_company) ? 'P' : 'F',
+                'mobilNumber'  => $phone,
+                'phoneNumber'  => $phone,
+                'emailAddress' => $entity->email,
+                'subject'      => !empty($entity->billing_company) ? 'P' : 'F',
                 // neptaj se na ičo ? nikde
             ];
         } else {
@@ -679,15 +688,15 @@ class Balikovna
                 'company'        => $entity->billing_company ?? '',
                 'aditionAddress' => $entity?->address_info ?? '',
                 // Doplňující informace k názvu adresát - Informace budou vytištěny na štítku
-                'address'        => [
-                    'street'  => "BALÍKOVNA", // According to the documentation, the address is just 'BALÍKOVNA'
+                'address' => [
+                    'street'  => 'BALÍKOVNA', // According to the documentation, the address is just 'BALÍKOVNA'
                     'city'    => $entity->balikovna_name,
                     'zipCode' => $entity->balikovna_zip,
                 ],
-                'mobilNumber'    => $phone,
-                'phoneNumber'    => $phone,
-                'emailAddress'   => $entity->email,
-                'subject'        => !empty($entity->billing_company) ? 'P' : 'F',
+                'mobilNumber'  => $phone,
+                'phoneNumber'  => $phone,
+                'emailAddress' => $entity->email,
+                'subject'      => !empty($entity->billing_company) ? 'P' : 'F',
                 // Assuming 'P' is for company, 'F' is for physical person
             ];
         }
@@ -703,8 +712,8 @@ class Balikovna
      * @param int $position Position value on A4.
      * @return CoreResponse The response from the API.
      */
-    public static function parcelPrinting(string $parcelCode, int $formID = null, int $shiftHorizontal = 0, int $shiftVertical = 0, int $position = 1): CoreResponse
-        //https://www.ceskaposta.cz/napi/b2b#parcelPrinting
+    public static function parcelPrinting(string $parcelCode, ?int $formID = null, int $shiftHorizontal = 0, int $shiftVertical = 0, int $position = 1): CoreResponse
+    // https://www.ceskaposta.cz/napi/b2b#parcelPrinting
     {
         // Prepare the request data
         $config = static::getConfig();
@@ -724,12 +733,13 @@ class Balikovna
                 'shiftVertical'   => $shiftVertical,
                 'position'        => $position,
             ],
-            'printingData'   => [
+            'printingData' => [
                 $parcelCode,
                 //                'NB0600004030U' //ok v dokumentaci to nepíšou ale je to normalně "parcelCode" (čarovej kod zasilky)
             ],
-            //v odpovědi printingDataResult	 	Data štítku v base64 kódování
+            // v odpovědi printingDataResult	 	Data štítku v base64 kódování
         ];
+
         // Send the request and return the response
         return static::getResponse('parcelPrinting', $data);
     }
@@ -748,6 +758,3 @@ class Balikovna
         ];
     }
 }
-
-
-?>

@@ -10,63 +10,81 @@ use Ondrejsanetrnik\Core\CoreResponse;
 class Gls
 {
     public const STATUS_MAP = [
-        'Doručeno'                         => 'Doručena',
-        'Delivered To Neighbour'           => 'Doručena',
-        'Signed On Paper'                  => 'Doručena',
-        'Signature After Delivery'         => 'Doručena',
-        'Ostatní data přijata'             => 'Čeká na vyzvednutí kurýrem',
-        'COD data přijata'                 => 'Čeká na vyzvednutí kurýrem',
-        'P&S/P&R na vyzvednutí'            => 'Čeká na vyzvednutí kurýrem',
-        'P&S/P&R vytisknut'                => 'Čeká na vyzvednutí kurýrem',
-        'Není balík P&S/P&R'               => 'Čeká na vyzvednutí kurýrem',
-        'Balík není připraven'             => 'Čeká na vyzvednutí kurýrem',
-        'Vyzvednuto'                       => 'Přijata k přepravě',
-        'Registrace'                       => 'V přepravě',
-        'Depo vstup'                       => 'V přepravě',
-        'HUB Inbound'                      => 'V přepravě',
-        'HUB Outbound'                     => 'V přepravě',
-        'HUB Storage'                      => 'V přepravě',
-        'Nesprávné PSČ'                    => 'V přepravě',
-        'Nesprávné nasměrování na depo'    => 'V přepravě',
-        'Small Parcel'                     => 'V přepravě',
-        'Depo sklad'                       => 'V přepravě',
-        'Dovolená'                         => 'V přepravě',
-        'Depot Re-delivery'                => 'V přepravě',
-        'Chybné nasortování na depo'       => 'V přepravě',
-        'Překročena kapacita trasy'        => 'V přepravě',
-        'Not Systemlike Parcel'            => 'V přepravě',
-        'Změna adresy doručení'            => 'V přepravě',
-        'Damaged'                          => 'V přepravě',
-        'Nesprávná adresa (neúplná)'       => 'V přepravě',
-        'Nesprávná trasa'                  => 'V přepravě',
-        'Rollkarte Check'                  => 'V přepravě',
-        'Dle nového požadavku'             => 'V přepravě',
-        'Bez údajů'                        => 'V přepravě',
-        'Change Of Delivery Address'       => 'V přepravě',
-        'Ztracený'                         => 'V přepravě',
-        'Příjem zboží zavřený'             => 'V přepravě',
-        'RQ Info Normal'                   => 'V přepravě',
-        'StatusKey_St145'                  => 'V přepravě',
-        'Relabelled'                       => 'V přepravě',
-        'ParcellBox poškozený'             => 'V přepravě',
-        'Pick Up By Consignee'             => 'V přepravě',
-        'Technický problém s ParcellBoxem' => 'V přepravě',
-        'Warehouse Error'                  => 'V přepravě',
-        'Na doručení'                      => 'Doručována',
-        'Pevne urceny den doruceni'        => 'Doručována',
-        'adresát nezastižen - oznámení'    => 'Doručována',
-        'Nedostatek peněz'                 => 'Doručována',
-        'ParcelLocker deposit'             => 'Připravena k vyzvednutí',
-        'Doručení do ParcelShopu'          => 'Připravena k vyzvednutí',
-        'Uskladněno v ParcelShopu'         => 'Připravena k vyzvednutí',
-        'Zaslání do HUB'                   => 'Na cestě zpátky',
-        'Zpětné zaslání odesílateli'       => 'Na cestě zpátky',
-        'Odmítnutí převzetí balíku'        => 'Na cestě zpátky',
-        'ParcelShop return'                => 'Na cestě zpátky',
-        'Odmítnutí (neobjednaná služba)'   => 'Na cestě zpátky',
-        'P&S/P&R vymazán'                  => 'Stornována',
+        'Doručeno'                           => 'Doručena',
+        'Delivered To Neighbour'             => 'Doručena',
+        'Signed On Paper'                    => 'Doručena',
+        'Signature After Delivery'           => 'Doručena',
+        'Ostatní data přijata'               => 'Čeká na vyzvednutí kurýrem',
+        'Data sent'                          => 'Čeká na vyzvednutí kurýrem',
+        'COD data přijata'                   => 'Čeká na vyzvednutí kurýrem',
+        'P&S/P&R na vyzvednutí'              => 'Čeká na vyzvednutí kurýrem',
+        'P&S/P&R vytisknut'                  => 'Čeká na vyzvednutí kurýrem',
+        'Není balík P&S/P&R'                 => 'Čeká na vyzvednutí kurýrem',
+        'Balík není připraven'               => 'Čeká na vyzvednutí kurýrem',
+        'Vyzvednuto'                         => 'Přijata k přepravě',
+        'Successful pick up'                 => 'Přijata k přepravě',
+        'Registrace'                         => 'V přepravě',
+        'Registrace do přepravy GLS'         => 'V přepravě',
+        'APL-Registration'                   => 'V přepravě',
+        'Depo vstup'                         => 'V přepravě',
+        'Tranzit na depo'                    => 'V přepravě',
+        'Depot Transit'                      => 'V přepravě',
+        'HUB Inbound'                        => 'V přepravě',
+        'HUB Outbound'                       => 'V přepravě',
+        'HUB Storage'                        => 'V přepravě',
+        'Nesprávné PSČ'                      => 'V přepravě',
+        'Nesprávné nasměrování na depo'      => 'V přepravě',
+        'Small Parcel'                       => 'V přepravě',
+        'Depo sklad'                         => 'V přepravě',
+        'Dovolená'                           => 'V přepravě',
+        'Depot Re-delivery'                  => 'V přepravě',
+        'Chybné nasortování na depo'         => 'V přepravě',
+        'Překročena kapacita trasy'          => 'V přepravě',
+        'Not Systemlike Parcel'              => 'V přepravě',
+        'Změna adresy doručení'              => 'V přepravě',
+        'Damaged'                            => 'V přepravě',
+        'Nesprávná adresa (neúplná)'         => 'V přepravě',
+        'Nesprávná trasa'                    => 'V přepravě',
+        'Rollkarte Check'                    => 'V přepravě',
+        'Dle nového požadavku'               => 'V přepravě',
+        'Bez údajů'                          => 'V přepravě',
+        'Change Of Delivery Address'         => 'V přepravě',
+        'Ztracený'                           => 'V přepravě',
+        'Příjem zboží zavřený'               => 'V přepravě',
+        'RQ Info Normal'                     => 'V přepravě',
+        'StatusKey_St145'                    => 'V přepravě',
+        'Relabelled'                         => 'V přepravě',
+        'ParcellBox poškozený'               => 'V přepravě',
+        'Pick Up By Consignee'               => 'V přepravě',
+        'Technický problém s ParcellBoxem'   => 'V přepravě',
+        'Warehouse Error'                    => 'V přepravě',
+        'Na doručení'                        => 'Doručována',
+        'Probíhá doručování'                 => 'Doručována',
+        'Delivery list scan'                 => 'Doručována',
+        'Pevne urceny den doruceni'          => 'Doručována',
+        'adresát nezastižen - oznámení'      => 'Doručována',
+        'Nedostatek peněz'                   => 'Doručována',
+        'ParcelLocker deposit'               => 'Připravena k vyzvednutí',
+        'Doručení do ParcelShopu'            => 'Připravena k vyzvednutí',
+        'Uskladněno v ParcelShopu'           => 'Připravena k vyzvednutí',
+        'ParcelLocker - Reservation expired' => 'Doručována',
+        'Zaslání do HUB'                     => 'Na cestě zpátky',
+        'Zpětné zaslání odesílateli'         => 'Na cestě zpátky',
+        'Odmítnutí převzetí balíku'          => 'Na cestě zpátky',
+        'ParcelShop return'                  => 'Na cestě zpátky',
+        'Odmítnutí (neobjednaná služba)'     => 'Na cestě zpátky',
+        'P&S/P&R vymazán'                    => 'Stornována',
 
         'returned' => 'Vrácena obchodu',
+    ];
+
+    # When any of these appear in history, intermediate depot scans stay on return flow (same idea as DPD).
+    private const RETURN_STATUS_DESCRIPTIONS = [
+        'Zpětné zaslání odesílateli',
+        'Zaslání do HUB',
+        'ParcelShop return',
+        'Odmítnutí převzetí balíku',
+        'Odmítnutí (neobjednaná služba)',
     ];
 
     public const URL = 'https://api.mygls.cz/ParcelService.svc/json/';
@@ -336,12 +354,7 @@ class Gls
 
             $statuses = collect($response->data->ParcelStatusList);
 
-            //            foreach ($statuses as $statusObject) {
-            //                if (!array_key_exists($statusObject->StatusDescription, self::STATUS_MAP))
-            //                    Log::warning('GLS status not recognized: ' . $statusObject->StatusDescription);
-            //            }
-
-            $currentStatusDescription = $statuses[0]?->StatusDescription;
+            $currentStatusDescription = (string)($statuses[0]?->StatusDescription ?? '');
             $statusMap = self::STATUS_MAP;
 
             if ($statuses->where('StatusDescription', 'P&S/P&R na vyzvednutí')->count()) {
@@ -351,22 +364,39 @@ class Gls
 
             $status = $statusMap[$currentStatusDescription] ?? 'V přepravě';
 
-            if (
-                $statuses->where('StatusDescription', 'Zpětné zaslání odesílateli')->count() &&
-                $status == 'Doručena'
-            ) {
-                # The parcel was refused and is on its way back, the delivered now means returned to sender -.-
-                $status = 'Vrácena obchodu';
+            if (self::statusesContainReturn($statuses)) {
+                # "Delivered" after a return event means handed back to us; other scans stay on return path
+                if ($status === 'Doručena') {
+                    $status = 'Vrácena obchodu';
+                } elseif ($status !== 'Vrácena obchodu') {
+                    $status = 'Na cestě zpátky';
+                }
             }
 
             $statusObject = (object)[
-                'status' => $status,
+                'status'     => $status,
+                'raw_status' => $currentStatusDescription !== '' ? $currentStatusDescription : null,
+                'events'     => ParcelTrackingEvents::fromGlsStatusList($statuses),
             ];
 
             $response->setData($statusObject);
         }
 
         return $response;
+    }
+
+    /**
+     * @param \Illuminate\Support\Collection<int, object> $statuses
+     */
+    private static function statusesContainReturn($statuses): bool
+    {
+        return $statuses->contains(
+            fn($status): bool => in_array(
+                (string)($status->StatusDescription ?? ''),
+                self::RETURN_STATUS_DESCRIPTIONS,
+                true,
+            ),
+        );
     }
 
     public static function getCostFor(ParcelableContract $parcelable): float

@@ -48,26 +48,26 @@ class Dpd
     private const DELIVERED_STATUS_CODE = '13';
 
     public const STATUS_MAP = [
-        'Parcel is delivered to recipient'              => 'Doručena',
-        'Parcel is delivered to consignee'              => 'Doručena',
-        'Delivered'                                     => 'Doručena',
+        'Parcel is delivered to recipient'                    => 'Doručena',
+        'Parcel is delivered to consignee'                    => 'Doručena',
+        'Delivered'                                           => 'Doručena',
         'Parcel was picked up by consignee from Pickup point' => 'Doručena',
-        'Parcel picked up by delivery driver'           => 'Doručována',
-        'Parcel has been given additional information'  => 'V přepravě',
-        'Accepted on delivery Depot'                    => 'V přepravě',
-        'Parcel is scanned on hub'                      => 'V přepravě',
-        'Parcel accepted on dispatch depot from driver' => 'Přijata k přepravě',
-        'Parcel accepted on dispatch depot'             => 'Přijata k přepravě',
-        'Předáno příjemci'                              => 'Doručena',
-        'Předáno do rukou'                              => 'Doručena',
-        'Zásilka doručena'                              => 'Doručena',
-        'Zásilka doručena příjemci'                     => 'Doručena',
-        'Ready for return to The courier'               => 'Na cestě zpátky',
-        'Returned to The courier'                       => 'Na cestě zpátky',
-        'Parcel is returned to sender'                  => 'Na cestě zpátky',
-        'Returning to Sender'                           => 'Na cestě zpátky',
-        'Returned to Sender'                            => 'Na cestě zpátky',
-        'Vráceno odesílateli'                           => 'Na cestě zpátky',
+        'Parcel picked up by delivery driver'                 => 'Doručována',
+        'Parcel has been given additional information'        => 'V přepravě',
+        'Accepted on delivery Depot'                          => 'V přepravě',
+        'Parcel is scanned on hub'                            => 'V přepravě',
+        'Parcel accepted on dispatch depot from driver'       => 'Přijata k přepravě',
+        'Parcel accepted on dispatch depot'                   => 'Přijata k přepravě',
+        'Předáno příjemci'                                    => 'Doručena',
+        'Předáno do rukou'                                    => 'Doručena',
+        'Zásilka doručena'                                    => 'Doručena',
+        'Zásilka doručena příjemci'                           => 'Doručena',
+        'Ready for return to The courier'                     => 'Na cestě zpátky',
+        'Returned to The courier'                             => 'Na cestě zpátky',
+        'Parcel is returned to sender'                        => 'Na cestě zpátky',
+        'Returning to Sender'                                 => 'Na cestě zpátky',
+        'Returned to Sender'                                  => 'Na cestě zpátky',
+        'Vráceno odesílateli'                                 => 'Na cestě zpátky',
     ];
 
     # Match by description only — DPD reuses numeric codes (e.g. 6 vs 06) for unrelated events.
@@ -529,9 +529,12 @@ class Dpd
         }
 
         $mapped = self::mapStatusFromParcelEvents($events, $parcelNumber);
+        $trackingEvents = ParcelTrackingEvents::fromDpdParcelEvents($events);
 
         $statusObject = (object)[
-            'status' => $mapped,
+            'status'     => $mapped,
+            'raw_status' => $trackingEvents[0]['description'] ?? null,
+            'events'     => $trackingEvents,
         ];
 
         return $response->success($statusObject);
