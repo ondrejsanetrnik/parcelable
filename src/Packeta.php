@@ -119,10 +119,32 @@ class Packeta
             $lastStatusObject->events = $events;
             $lastStatusObject->raw_status = $codeText !== '' ? $codeText : null;
 
+            $storedUntil = self::storedUntilForPickup($mappedStatus, $parcelNumber);
+            if ($storedUntil !== null) {
+                $lastStatusObject->storedUntil = $storedUntil;
+            }
+
             $response->data = $lastStatusObject;
         }
 
         return $response;
+    }
+
+    /**
+     * packetTracking has no storedUntil. packetStatus (CurrentStatusRecord) does.
+     */
+    private static function storedUntilForPickup(?string $mappedStatus, int $parcelNumber): ?string
+    {
+        if ($mappedStatus !== ParcelStoredUntil::PICKUP_STATUS) {
+            return null;
+        }
+
+        $current = self::packetStatus($parcelNumber);
+        if (!$current->success) {
+            return null;
+        }
+
+        return ParcelStoredUntil::fromPacketaStoredUntil($current->data->storedUntil ?? null);
     }
 
     /**

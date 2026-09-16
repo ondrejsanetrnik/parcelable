@@ -6,6 +6,7 @@ use App\Helpers\Api;
 use Illuminate\Support\Facades\Log;
 use Ondrejsanetrnik\Parcelable\AllegroOne;
 use Ondrejsanetrnik\Parcelable\Parcel;
+use Ondrejsanetrnik\Parcelable\ParcelStoredUntil;
 
 class UpdateBaselinkerParcelStatuses
 {
@@ -39,11 +40,22 @@ class UpdateBaselinkerParcelStatuses
                     foreach ($parcels as $parcel) {
                         $parcelHistory = $packagesHistory[$parcel->external_id] ?? null;
                         if ($parcelHistory) {
-                            $status = AllegroOne::STATUSES[array_pop($parcelHistory)['tracking_status']] ?? 'V přepravě';
-                            $parcel->update([
+                            $history = is_array($parcelHistory) ? $parcelHistory : [];
+                            $last = end($history) ?: [];
+                            $status = AllegroOne::STATUSES[$last['tracking_status'] ?? null] ?? 'V přepravě';
+                            $attributes = [
                                 'status'     => $status,
                                 'updated_at' => now(),
-                            ]);
+                            ];
+
+                            if ($status === ParcelStoredUntil::PICKUP_STATUS) {
+                                $storedUntil = ParcelStoredUntil::fromBaselinkerHistory($history);
+                                if ($storedUntil !== null) {
+                                    $attributes['stored_until'] = $storedUntil;
+                                }
+                            }
+
+                            $parcel->update($attributes);
                         }
                     }
                 } else {
