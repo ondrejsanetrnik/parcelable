@@ -442,6 +442,14 @@ class Gls
             }
 
             $statusObject->status = $status;
+
+            if ($status === ParcelStoredUntil::PICKUP_STATUS) {
+                $storedUntil = ParcelStoredUntil::fromGlsStatusList($statuses);
+                if ($storedUntil !== null) {
+                    $statusObject->storedUntil = $storedUntil;
+                }
+            }
+
             $response->setData($statusObject);
         }
 

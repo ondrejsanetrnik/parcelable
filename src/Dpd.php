@@ -55,6 +55,8 @@ class Dpd
         'Delivered'                                           => 'Doručena',
         'Parcel was picked up by consignee from Pickup point' => 'Doručena',
         'Parcel was picked up by recipient'                   => 'Doručena',
+        'Delivered to pickup point'                           => 'Připravena k vyzvednutí',
+        'Locker ready to pickup'                              => 'Připravena k vyzvednutí',
         'Parcel picked up by delivery driver'                 => 'Doručována',
         'Parcel has been given additional information'        => 'V přepravě',
         'Accepted on delivery Depot'                          => 'V přepravě',
@@ -550,6 +552,13 @@ class Dpd
             'raw_status' => $trackingEvents[0]['description'] ?? null,
             'events'     => $trackingEvents,
         ];
+
+        if ($mapped === ParcelStoredUntil::PICKUP_STATUS) {
+            $storedUntil = ParcelStoredUntil::fromDpdParcelEvents($events);
+            if ($storedUntil !== null) {
+                $statusObject->storedUntil = $storedUntil;
+            }
+        }
 
         return $response->success($statusObject);
     }

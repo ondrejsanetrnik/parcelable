@@ -191,7 +191,7 @@ class Parcel extends Entity
         if ($response->success && $response->data) {
             $attributes = [];
 
-            if (property_exists($response->data, 'storedUntil')) {
+            if (property_exists($response->data, 'storedUntil') && filled($response->data->storedUntil)) {
                 $attributes['stored_until'] = $response->data->storedUntil;
             }
 
