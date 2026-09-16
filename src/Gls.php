@@ -48,6 +48,7 @@ class Gls
         'Chybně natříděno'                 => 'V přepravě',
         'Small Parcel'                     => 'V přepravě',
         'Malý balík'                       => 'V přepravě',
+        'Milkrun'                          => 'V přepravě',
         'Milkrun small'                    => 'V přepravě',
         'Depo sklad'                       => 'V přepravě',
         'Uskladněno na depu'               => 'V přepravě',
@@ -74,17 +75,22 @@ class Gls
         'Ztracený'                         => 'V přepravě',
         'Příjem zboží zavřený'             => 'V přepravě',
         'RQ Info Normal'                   => 'V přepravě',
+        'Oznámení'                         => 'V přepravě',
         'StatusKey_St145'                  => 'V přepravě',
         'Relabelled'                       => 'V přepravě',
         'ParcellBox poškozený'             => 'V přepravě',
         'Pick Up By Consignee'             => 'V přepravě',
         'Technický problém s ParcellBoxem' => 'V přepravě',
+        'Nedoručeno do Boxu - plná kapacita' => 'V přepravě',
         'Warehouse Error'                  => 'V přepravě',
+        'Chyba skladu'                     => 'V přepravě',
         'Na doručení'                      => 'Doručována',
         'Probíhá doručování'               => 'Doručována',
         'Delivery list scan'               => 'Doručována',
         'Pevne urceny den doruceni'        => 'Doručována',
         'Doručení ve zvoleném termínu'     => 'Doručována',
+        # End-of-day / route closed between delivery attempts (status code 14).
+        'Uzavřeno'                         => 'Doručována',
         'adresát nezastižen - oznámení'    => 'Doručována',
         'Příjemce nezastižen'              => 'Doručována',
         'Nedostatek peněz'                 => 'Doručována',
@@ -105,6 +111,7 @@ class Gls
         'Vráceno z výdejního místa'          => 'Na cestě zpátky',
         'Vráceno na třídicí centrum'         => 'Na cestě zpátky',
         'P&S/P&R vymazán'                    => 'Stornována',
+        'P&S/P&R - zrušeno'                  => 'Stornována',
     ];
 
     # Sticky history flag for ambiguous depot scans after a real return started.
