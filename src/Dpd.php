@@ -47,6 +47,8 @@ class Dpd
     # GeoAPI: code 13 finalizes the lifecycle for delivery to consignee OR back to sender.
     private const DELIVERED_STATUS_CODE = '13';
 
+    # Keys are event descriptions, not statusCode — GeoAPI reuses codes
+    # (10 = hub scan AND "picked up by recipient" at a pickup point).
     public const STATUS_MAP = [
         'Parcel is delivered to recipient'                    => 'Doručena',
         'Parcel is delivered to consignee'                    => 'Doručena',
@@ -61,6 +63,9 @@ class Dpd
         'Parcel is scanned on hub'                            => 'V přepravě',
         'Parcel accepted on dispatch depot from driver'       => 'Přijata k přepravě',
         'Parcel accepted on dispatch depot'                   => 'Přijata k přepravě',
+        'Driver picked up parcel from sender'                 => 'Přijata k přepravě',
+        'Delivered to pickup point'                           => 'Připravena k vyzvednutí',
+        'Locker ready to pickup'                              => 'Připravena k vyzvednutí',
         'Předáno příjemci'                                    => 'Doručena',
         'Předáno do rukou'                                    => 'Doručena',
         'Zásilka doručena'                                    => 'Doručena',
@@ -71,6 +76,14 @@ class Dpd
         'Returning to Sender'                                 => 'Na cestě zpátky',
         'Returned to Sender'                                  => 'Na cestě zpátky',
         'Vráceno odesílateli'                                 => 'Na cestě zpátky',
+    ];
+
+    # GeoAPI noise — skip when choosing current status so code 18 cannot hide pickup.
+    private const INFORMATIONAL_STATUS_DESCRIPTIONS = [
+        'Parcel has been given additional information',
+        'Shipment expiration is updated',
+        'N/A',
+        'Unknown parcel status. Please contact our support',
     ];
 
     # Match by description only — DPD reuses numeric codes (e.g. 6 vs 06) for unrelated events.
@@ -575,7 +588,7 @@ class Dpd
             return $bTs <=> $aTs;
         });
 
-        $latest = $events[0] ?? [];
+        $latest = self::latestMappableEvent($events);
         $desc = self::normalizeEventDescription($latest['status']['description'] ?? '');
         $code = (string)($latest['status']['statusCode'] ?? '');
 
@@ -630,6 +643,33 @@ class Dpd
         }
 
         return false;
+    }
+
+    /**
+     * Newest-first events, skipping GeoAPI noise that otherwise hides pickup/delivery
+     * when it shares a timestamp with the real scan (code 18 vs recipient pickup).
+     *
+     * @param array<int, array<string, mixed>> $events
+     * @return array<string, mixed>
+     */
+    private static function latestMappableEvent(array $events): array
+    {
+        foreach ($events as $event) {
+            if (!is_array($event)) {
+                continue;
+            }
+
+            $description = self::normalizeEventDescription($event['status']['description'] ?? '');
+            if ($description === '' || in_array($description, self::INFORMATIONAL_STATUS_DESCRIPTIONS, true)) {
+                continue;
+            }
+
+            return $event;
+        }
+
+        $fallback = $events[0] ?? [];
+
+        return is_array($fallback) ? $fallback : [];
     }
 
     private static function normalizeEventDescription(?string $description): string
