@@ -625,6 +625,24 @@ class Dpd
             $mapped = 'V přepravě';
         }
 
+        if (self::eventsContainReturnToSender($events)) {
+            # DPD often labels return-to-sender handover as "delivered to recipient" (code 13).
+            if ($mapped === 'Doručena') {
+                return 'Vrácena obchodu';
+            }
+
+            if (in_array($mapped, [
+                'V přepravě',
+                'Přijata k přepravě',
+                'Čeká na vyzvednutí kurýrem',
+                ParcelStoredUntil::PICKUP_STATUS,
+            ], true)) {
+                return 'Na cestě zpátky';
+            }
+
+            return $mapped;
+        }
+
         # Pickup-point arrival is often "delivered to recipient" (code 13). That is not a customer pickup.
         if (
             $mapped === 'Doručena'
@@ -632,25 +650,7 @@ class Dpd
             && self::shipmentWaitedAtPickupPoint($events, $entity)
             && !self::eventsContainPickedUpByConsignee($events)
         ) {
-            $mapped = ParcelStoredUntil::PICKUP_STATUS;
-        }
-
-        if (!self::eventsContainReturnToSender($events)) {
-            return $mapped;
-        }
-
-        # DPD often labels return-to-sender handover as "delivered to recipient" (code 13).
-        if ($mapped === 'Doručena') {
-            return 'Vrácena obchodu';
-        }
-
-        if (in_array($mapped, [
-            'V přepravě',
-            'Přijata k přepravě',
-            'Čeká na vyzvednutí kurýrem',
-            ParcelStoredUntil::PICKUP_STATUS,
-        ], true)) {
-            return 'Na cestě zpátky';
+            return ParcelStoredUntil::PICKUP_STATUS;
         }
 
         return $mapped;
