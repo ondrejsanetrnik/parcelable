@@ -253,7 +253,17 @@ class Packeta
 
         if ($response?->data !== null) {
             Storage::disk('private')->put('labels/' . $id . '.pdf', $response->data);
+
+            return;
         }
+
+        Log::warning('Packeta getLabel returned no PDF payload', [
+            'packet_id'  => $id,
+            'carrier_id' => $carrierId,
+            'reason'     => 'carrier_fail',
+            'success'    => $response?->success,
+            'message'    => $response?->message ?? null,
+        ]);
     }
 
     /**
