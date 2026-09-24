@@ -200,7 +200,15 @@ class Parcel extends Entity
             }
 
             if (filled($response->data->status ?? null)) {
-                $attributes['status'] = $response->data->status;
+                $nextStatus = $response->data->status;
+                # Warehouse / return mapping is source of truth — do not regress to a false DPD "delivered".
+                if ($this->status === 'Vrácena obchodu' && $nextStatus === 'Doručena') {
+                    $nextStatus = null;
+                }
+
+                if ($nextStatus !== null) {
+                    $attributes['status'] = $nextStatus;
+                }
             }
 
             $this->fill($attributes);
