@@ -97,6 +97,26 @@ class Dpd
         'Vráceno odesílateli',
     ];
 
+    private const PICKUP_WAIT_DESCRIPTIONS = [
+        'Delivered to pickup point',
+        'Locker ready to pickup',
+    ];
+
+    private const PICKED_UP_BY_CONSIGNEE_DESCRIPTIONS = [
+        'Parcel was picked up by consignee from Pickup point',
+        'Parcel was picked up by recipient',
+    ];
+
+    private const AMBIGUOUS_DELIVERED_DESCRIPTIONS = [
+        'Parcel is delivered to recipient',
+        'Parcel is delivered to consignee',
+        'Delivered',
+        'Předáno příjemci',
+        'Předáno do rukou',
+        'Zásilka doručena',
+        'Zásilka doručena příjemci',
+    ];
+
     public static function getCostFor(ParcelableContract $parcelable): float
     {
         return 60.0;
@@ -544,7 +564,7 @@ class Dpd
             return $response->fail('DPD nevrátilo žádné události sledování.');
         }
 
-        $mapped = self::mapStatusFromParcelEvents($events, $parcelNumber);
+        $mapped = self::mapStatusFromParcelEvents($events, $parcelNumber, $entity);
         $trackingEvents = ParcelTrackingEvents::fromDpdParcelEvents($events);
 
         $statusObject = (object)[
@@ -571,7 +591,7 @@ class Dpd
      *
      * @param array<int, array<string, mixed>> $events
      */
-    public static function mapStatusFromParcelEvents(array $events, ?string $parcelNumber = null): string
+    public static function mapStatusFromParcelEvents(array $events, ?string $parcelNumber = null, ?Entity $entity = null): string
     {
         usort($events, function ($a, $b): int {
             try {
@@ -605,18 +625,32 @@ class Dpd
             $mapped = 'V přepravě';
         }
 
-        if (!self::eventsContainReturnToSender($events)) {
+        if (self::eventsContainReturnToSender($events)) {
+            # DPD often labels return-to-sender handover as "delivered to recipient" (code 13).
+            if ($mapped === 'Doručena') {
+                return 'Vrácena obchodu';
+            }
+
+            if (in_array($mapped, [
+                'V přepravě',
+                'Přijata k přepravě',
+                'Čeká na vyzvednutí kurýrem',
+                ParcelStoredUntil::PICKUP_STATUS,
+            ], true)) {
+                return 'Na cestě zpátky';
+            }
+
             return $mapped;
         }
 
-        # DPD often labels return-to-sender handover as "delivered to recipient" (code 13).
-        # Only rewrite ambiguous transit / delivered states — leave pickup & out-for-delivery alone.
-        if ($mapped === 'Doručena') {
-            return 'Vrácena obchodu';
-        }
-
-        if (in_array($mapped, ['V přepravě', 'Přijata k přepravě', 'Čeká na vyzvednutí kurýrem'], true)) {
-            return 'Na cestě zpátky';
+        # Pickup-point arrival is often "delivered to recipient" (code 13). That is not a customer pickup.
+        if (
+            $mapped === 'Doručena'
+            && self::isAmbiguousDeliveredEvent($desc, $code)
+            && self::shipmentWaitedAtPickupPoint($events, $entity)
+            && !self::eventsContainPickedUpByConsignee($events)
+        ) {
+            return ParcelStoredUntil::PICKUP_STATUS;
         }
 
         return $mapped;
@@ -643,6 +677,58 @@ class Dpd
         }
 
         return false;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $events
+     */
+    private static function eventsContainPickedUpByConsignee(array $events): bool
+    {
+        foreach ($events as $event) {
+            $description = self::normalizeEventDescription($event['status']['description'] ?? '');
+            if (in_array($description, self::PICKED_UP_BY_CONSIGNEE_DESCRIPTIONS, true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $events
+     */
+    private static function shipmentWaitedAtPickupPoint(array $events, ?Entity $entity): bool
+    {
+        $delivery = trim((string)($entity->delivery ?? ''));
+        if ($delivery === 'DPD Pickup' || $delivery === 'Vyzvednutí DPD') {
+            return true;
+        }
+
+        if (trim((string)($entity->packeta ?? '')) !== '') {
+            return true;
+        }
+
+        foreach ($events as $event) {
+            $description = self::normalizeEventDescription($event['status']['description'] ?? '');
+            if (in_array($description, self::PICKUP_WAIT_DESCRIPTIONS, true)) {
+                return true;
+            }
+
+            if (str_contains($description, 'Pickup point') || str_contains($description, 'pickup point')) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static function isAmbiguousDeliveredEvent(string $description, string $code): bool
+    {
+        if (in_array($description, self::AMBIGUOUS_DELIVERED_DESCRIPTIONS, true)) {
+            return true;
+        }
+
+        return $description === '' && $code === self::DELIVERED_STATUS_CODE;
     }
 
     /**

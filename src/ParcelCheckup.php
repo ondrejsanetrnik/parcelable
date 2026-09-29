@@ -7,6 +7,9 @@ use Throwable;
 
 class ParcelCheckup
 {
+    # DPD code 13 can mean delivered to us on a return. Keep polling a while after a false "Doručena".
+    private const DPD_DELIVERED_RECHECK_DAYS = 21;
+
     /**
      * Updates on-the-way parcels from the last month, plus any still waiting at a pickup
      * point (those drop out of the month window and otherwise never get stored_until / a real terminal status).
@@ -18,11 +21,20 @@ class ParcelCheckup
         Parcel::query()
             ->where('carrier', '!=', 'Allegro One') # Allegro One is updated in batch through separate call
             ->where(fn($q) => $q->where('carrier', '!=', 'DPD')->orWhereNotNull('parcelable_id'))
-            # Also null: unmapped Packeta codes used to wipe status and drop parcels from tracking
-            ->where(fn($q) => $q->whereIn('status', Parcel::ON_THE_WAY_STATUSES)->orWhereNull('status'))
             ->where(function ($q) {
-                $q->where('updated_at', '>', now()->subMonth())
-                    ->orWhere('status', ParcelStoredUntil::PICKUP_STATUS);
+                $q->where(function ($onTheWay) {
+                    # Also null: unmapped Packeta codes used to wipe status and drop parcels from tracking
+                    $onTheWay->where(fn($status) => $status->whereIn('status', Parcel::ON_THE_WAY_STATUSES)->orWhereNull('status'))
+                        ->where(function ($fresh) {
+                            $fresh->where('updated_at', '>', now()->subMonth())
+                                ->orWhere('status', ParcelStoredUntil::PICKUP_STATUS);
+                        });
+                })->orWhere(function ($dpdDelivered) {
+                    $dpdDelivered->where('carrier', 'DPD')
+                        ->where('status', 'Doručena')
+                        ->whereNotNull('parcelable_id')
+                        ->where('updated_at', '>', now()->subDays(self::DPD_DELIVERED_RECHECK_DAYS));
+                });
             })
             ->inRandomOrder()
             ->limit(10000)
