@@ -498,13 +498,38 @@ class Dpd
         $parcelCount = max(1, (int)($entity->parcel_count ?: 1));
         $amountCents = (int)round((float)$entity->cod_for_parcel * $parcelCount * 100);
 
-        return [
-            'cashOnDelivery' => [
-                'amountCents' => $amountCents,
-                'currency'    => $currency,
-                'payment'     => 'Cash',
-            ],
+        $cashOnDelivery = [
+            'amountCents' => $amountCents,
+            'currency'    => $currency,
+            'payment'     => 'Cash',
         ];
+
+        # Payout VS. Alza keeps the parcel number — their pairing reads the reference fields.
+        $variableSymbol = self::codVariableSymbol($entity);
+        if ($variableSymbol !== null) {
+            $cashOnDelivery['variableSymbol'] = $variableSymbol;
+        }
+
+        return [
+            'cashOnDelivery' => $cashOnDelivery,
+        ];
+    }
+
+    /**
+     * GeoAPI cashOnDelivery.variableSymbol (max 10). Empty → DPD pays out under the parcel number.
+     */
+    private static function codVariableSymbol(Entity $entity): ?string
+    {
+        if (CarrierClassResolver::isAlzaSource($entity)) {
+            return null;
+        }
+
+        $symbol = (string)$entity->id;
+        if ($symbol === '' || strlen($symbol) > 10 || !ctype_digit($symbol)) {
+            return null;
+        }
+
+        return $symbol;
     }
 
     private static function defaultPickupPoint(Entity $entity): string
