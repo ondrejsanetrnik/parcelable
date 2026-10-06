@@ -78,6 +78,18 @@ class ParcelObserver
             return;
         }
 
+        # Already picked up — hold-expiry / hub scans must not ask for return postage
+        if ($parcel->getOriginal('status') === 'Doručena') {
+            return;
+        }
+
+        if (
+            method_exists($order, 'hasEvents')
+            && $order->hasEvents([EventName::ObjednavkaDorucenaPrijemci])
+        ) {
+            return;
+        }
+
         # Stale historical parcels (e.g. revived by a full checkup scan) must not email customers
         if ($parcel->created_at?->lt(now()->subDays(self::MAX_RETURNING_EMAIL_PARCEL_AGE_DAYS))) {
             return;

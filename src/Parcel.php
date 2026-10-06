@@ -206,6 +206,14 @@ class Parcel extends Entity
                     $nextStatus = null;
                 }
 
+                # A later pickup must not be overwritten by a stale hold-expiry "return".
+                if (
+                    $this->status === 'Doručena'
+                    && in_array($nextStatus, ['Na cestě zpátky', 'Vrácena obchodu'], true)
+                ) {
+                    $nextStatus = null;
+                }
+
                 if ($nextStatus !== null) {
                     $attributes['status'] = $nextStatus;
                 }

@@ -45,7 +45,9 @@ class Packeta
         'delivered'                       => 'Doručena',
         'posted back'                     => 'Na cestě zpátky',
         'rejected by recipient'           => 'Na cestě zpátky',
-        'storage time expired'            => 'Na cestě zpátky',
+        # Hold expiry is not a return — Packeta still allows pickup the same day
+        # (GRA-3709). Mail / return status wait for posted back / returned.
+        'storage time expired'            => 'Připravena k vyzvednutí',
         'returned'                        => 'Vrácena obchodu',
         'cancelled'                       => 'Stornována',
     ];
