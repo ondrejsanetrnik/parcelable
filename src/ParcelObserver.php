@@ -78,15 +78,9 @@ class ParcelObserver
             return;
         }
 
-        # Already picked up — hold-expiry / hub scans must not ask for return postage
-        if ($parcel->getOriginal('status') === 'Doručena') {
-            return;
-        }
-
-        if (
-            method_exists($order, 'hasEvents')
-            && $order->hasEvents([EventName::ObjednavkaDorucenaPrijemci])
-        ) {
+        # Hold-expiry / hub scans must not ask for return postage.
+        # Real returns after a false Doručena still need the mail (GRA-3709).
+        if (Parcel::isHoldExpiryRawCode($parcel->polledRawStatus)) {
             return;
         }
 

@@ -43,6 +43,14 @@ class Parcel extends Entity
 
     public const MODEL_NAME_CZECH = 'Balíček';
 
+    # Hold expiry / locker hub scans are not a return. Real returns use posted-back,
+    # ParcelShop return, Zpětné zaslání, rejected, returned, …
+    public const HOLD_EXPIRY_RAW_CODES = [
+        'storage time expired',
+        'ParcelLocker - Reservation expired',
+        'Zaslání do HUB',
+    ];
+
     /**
      * The attributes that should be cast to native types.
      *
@@ -59,6 +67,9 @@ class Parcel extends Entity
         'Allegro One' => 'Ondrejsanetrnik\Parcelable\AllegroOne',
         'DPD'         => 'Ondrejsanetrnik\Parcelable\Dpd',
     ];
+
+    # Last carrier raw_status from updateStatus(); not persisted.
+    public ?string $polledRawStatus = null;
 
     /**
      * @param string|null $trackingNumber
@@ -168,6 +179,15 @@ class Parcel extends Entity
         return $response;
     }
 
+    public static function isHoldExpiryRawCode(?string $rawStatus): bool
+    {
+        if ($rawStatus === null || $rawStatus === '') {
+            return false;
+        }
+
+        return in_array($rawStatus, self::HOLD_EXPIRY_RAW_CODES, true);
+    }
+
     /**
      * Updates current status
      *
@@ -201,16 +221,17 @@ class Parcel extends Entity
 
             if (filled($response->data->status ?? null)) {
                 $nextStatus = $response->data->status;
+                $rawStatus = (string)($response->data->raw_status ?? '');
+                $this->polledRawStatus = $rawStatus !== '' ? $rawStatus : null;
+
                 # Warehouse / return mapping is source of truth — do not regress to a false DPD "delivered".
                 if ($this->status === 'Vrácena obchodu' && $nextStatus === 'Doručena') {
                     $nextStatus = null;
                 }
 
-                # A later pickup must not be overwritten by a stale hold-expiry "return".
-                if (
-                    $this->status === 'Doručena'
-                    && in_array($nextStatus, ['Na cestě zpátky', 'Vrácena obchodu'], true)
-                ) {
+                # A later pickup must not be overwritten by a stale hold-expiry / hub scan.
+                # Real returns after a false Doručena (posted back, ParcelShop return, …) must still apply.
+                if ($this->status === 'Doručena' && self::isHoldExpiryRawCode($this->polledRawStatus)) {
                     $nextStatus = null;
                 }
 
