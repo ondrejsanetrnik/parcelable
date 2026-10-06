@@ -100,9 +100,10 @@ class Gls
         'Připraveno v ParcelShopu'         => 'Připravena k vyzvednutí',
         'Připraveno v ParcelBoxu'          => 'Připravena k vyzvednutí',
         'Uskladněno na výdejním místě'     => 'Připravena k vyzvednutí',
-        # Expired locker hold starts the return path, not a fresh delivery attempt.
-        'ParcelLocker - Reservation expired' => 'Na cestě zpátky',
-        'Zaslání do HUB'                     => 'Na cestě zpátky',
+        # Locker hold expiry is not a return — the parcel often stays collectible
+        # (shop / still in the box). Real returns use ParcelShop return / Zpětné zaslání.
+        'ParcelLocker - Reservation expired' => 'Připravena k vyzvednutí',
+        'Zaslání do HUB'                     => 'V přepravě',
         'Zpětné zaslání odesílateli'         => 'Na cestě zpátky',
         'Odmítnutí převzetí balíku'          => 'Na cestě zpátky',
         'Odmítnuto'                          => 'Na cestě zpátky',

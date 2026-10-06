@@ -78,6 +78,12 @@ class ParcelObserver
             return;
         }
 
+        # Hold-expiry / hub scans must not ask for return postage.
+        # Real returns after a false Doručena still need the mail (GRA-3709).
+        if (Parcel::isHoldExpiryRawCode($parcel->polledRawStatus)) {
+            return;
+        }
+
         # Stale historical parcels (e.g. revived by a full checkup scan) must not email customers
         if ($parcel->created_at?->lt(now()->subDays(self::MAX_RETURNING_EMAIL_PARCEL_AGE_DAYS))) {
             return;
