@@ -643,11 +643,7 @@ class Dpd
             $mapped = 'Doručena';
         }
         if ($mapped === null) {
-            Log::channel('separated')->warning('DPD status not mapped', [
-                'description'  => $desc,
-                'statusCode'   => $code,
-                'parcelNumber' => $parcelNumber,
-            ]);
+            self::notifyUnknownStatus($desc, $code, $parcelNumber);
             $mapped = 'V přepravě';
         }
 
@@ -680,6 +676,25 @@ class Dpd
         }
 
         return $mapped;
+    }
+
+    /**
+     * Log every miss. Host app may digest via UnmappedCarrierStatusRecorder.
+     */
+    private static function notifyUnknownStatus(string $description, string $code, ?string $parcelNumber): void
+    {
+        Log::channel('separated')->warning('DPD status not mapped', [
+            'description'  => $description,
+            'statusCode'   => $code,
+            'parcelNumber' => $parcelNumber,
+        ]);
+
+        $label = $description !== '' ? $description : '(empty)';
+        if ($code !== '') {
+            $label .= " [{$code}]";
+        }
+
+        UnmappedCarrierStatusRecorder::record('DPD', $label, $parcelNumber ?? '');
     }
 
     /**

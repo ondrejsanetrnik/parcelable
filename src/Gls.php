@@ -3,8 +3,6 @@
 namespace Ondrejsanetrnik\Parcelable;
 
 use App\Models\Entity;
-use App\Models\User;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Ondrejsanetrnik\Core\CoreResponse;
@@ -17,6 +15,7 @@ class Gls
         'Signed On Paper'                  => 'Doručena',
         'Podepsáno (papír)'                => 'Doručena',
         'Signature After Delivery'         => 'Doručena',
+        'Vyzvednutí příjemcem'             => 'Doručena',
         'Vráceno odesílateli'              => 'Vrácena obchodu',
         'returned'                         => 'Vrácena obchodu',
         'Ostatní data přijata'             => 'Čeká na vyzvednutí kurýrem',
@@ -82,6 +81,8 @@ class Gls
         'Pick Up By Consignee'             => 'V přepravě',
         'Technický problém s ParcellBoxem' => 'V přepravě',
         'Nedoručeno do Boxu - plná kapacita' => 'V přepravě',
+        'Nedoručeno do Boxu - technická závada' => 'V přepravě',
+        'Problém s doručením do ParcelShopu' => 'V přepravě',
         'Warehouse Error'                  => 'V přepravě',
         'Chyba skladu'                     => 'V přepravě',
         'Na doručení'                      => 'Doručována',
@@ -111,6 +112,7 @@ class Gls
         'Odmítnutí (neobjednaná služba)'     => 'Na cestě zpátky',
         'Vráceno z výdejního místa'          => 'Na cestě zpátky',
         'Vráceno na třídicí centrum'         => 'Na cestě zpátky',
+        'Vrácení HUB poškození'              => 'Na cestě zpátky',
         'P&S/P&R vymazán'                    => 'Stornována',
         'P&S/P&R - zrušeno'                  => 'Stornována',
     ];
@@ -126,6 +128,7 @@ class Gls
         'Odmítnuto',
         'Vráceno z výdejního místa',
         'Vráceno na třídicí centrum',
+        'Vrácení HUB poškození',
     ];
 
     # Only these mapped states get rewritten by the sticky return flag.
@@ -472,7 +475,7 @@ class Gls
     }
 
     /**
-     * Log + Slack (once per day per code) when GLS returns an unmapped status.
+     * Log every miss. Host app may digest via UnmappedCarrierStatusRecorder.
      */
     protected static function notifyUnknownStatus(string $statusDescription, int|string $parcelNumber): void
     {
@@ -481,22 +484,7 @@ class Gls
             'parcelNumber' => $parcelNumber,
         ]);
 
-        $cacheKey = 'gls-unknown-status:' . ($statusDescription !== '' ? $statusDescription : 'empty');
-        if (!Cache::add($cacheKey, true, now()->addDay())) {
-            return;
-        }
-
-        try {
-            User::find(1)?->sendSlackMessage(
-                "⚠️ GLS: neznámý stav zásilky `{$statusDescription}` (parcel {$parcelNumber})."
-                . ' Doplň mapování v Gls::STATUS_MAP.'
-            );
-        } catch (\Throwable $e) {
-            Log::warning('Failed to send GLS unknown status Slack notification', [
-                'error'  => $e->getMessage(),
-                'status' => $statusDescription,
-            ]);
-        }
+        UnmappedCarrierStatusRecorder::record('GLS', $statusDescription, $parcelNumber);
     }
 
     public static function getCostFor(ParcelableContract $parcelable): float
