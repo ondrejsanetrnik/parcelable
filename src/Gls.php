@@ -3,8 +3,6 @@
 namespace Ondrejsanetrnik\Parcelable;
 
 use App\Models\Entity;
-use App\Models\User;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Ondrejsanetrnik\Core\CoreResponse;
@@ -17,6 +15,11 @@ class Gls
         'Signed On Paper'                  => 'Doručena',
         'Podepsáno (papír)'                => 'Doručena',
         'Signature After Delivery'         => 'Doručena',
+        'Vyzvednutí příjemcem'             => 'Doručena',
+        'ParcelShop pickup'                => 'Doručena',
+        'Parcelshop pickup'                => 'Doručena',
+        'Vyzvednutí v ParcelShopu'         => 'Doručena',
+        'Vyzvednuto v ParcelShopu'         => 'Doručena',
         'Vráceno odesílateli'              => 'Vrácena obchodu',
         'returned'                         => 'Vrácena obchodu',
         'Ostatní data přijata'             => 'Čeká na vyzvednutí kurýrem',
@@ -82,6 +85,8 @@ class Gls
         'Pick Up By Consignee'             => 'V přepravě',
         'Technický problém s ParcellBoxem' => 'V přepravě',
         'Nedoručeno do Boxu - plná kapacita' => 'V přepravě',
+        'Nedoručeno do Boxu - technická závada' => 'V přepravě',
+        'Problém s doručením do ParcelShopu' => 'V přepravě',
         'Warehouse Error'                  => 'V přepravě',
         'Chyba skladu'                     => 'V přepravě',
         'Na doručení'                      => 'Doručována',
@@ -111,6 +116,7 @@ class Gls
         'Odmítnutí (neobjednaná služba)'     => 'Na cestě zpátky',
         'Vráceno z výdejního místa'          => 'Na cestě zpátky',
         'Vráceno na třídicí centrum'         => 'Na cestě zpátky',
+        'Vrácení HUB poškození'              => 'Na cestě zpátky',
         'P&S/P&R vymazán'                    => 'Stornována',
         'P&S/P&R - zrušeno'                  => 'Stornována',
     ];
@@ -126,6 +132,7 @@ class Gls
         'Odmítnuto',
         'Vráceno z výdejního místa',
         'Vráceno na třídicí centrum',
+        'Vrácení HUB poškození',
     ];
 
     # Only these mapped states get rewritten by the sticky return flag.
@@ -135,6 +142,42 @@ class Gls
         'Přijata k přepravě',
         'Čeká na vyzvednutí kurýrem',
         'Doručena',
+    ];
+
+    # MyGLS Appendix G. Code 59 = customer collected at ParcelShop.
+    public const STATUS_CODE_MAP = [
+        '5'  => 'Doručena',
+        '58' => 'Doručena',
+        '59' => 'Doručena',
+        '92' => 'Doručena',
+        '93' => 'Doručena',
+        '54' => 'Připravena k vyzvednutí',
+        '55' => 'Připravena k vyzvednutí',
+        '56' => 'Připravena k vyzvednutí',
+        '57' => 'Připravena k vyzvednutí',
+        '97' => 'Připravena k vyzvednutí',
+    ];
+
+    private const COLLECTED_STATUS_CODES = ['5', '58', '59', '92', '93'];
+
+    private const COLLECTED_STATUS_DESCRIPTIONS = [
+        'Doručeno',
+        'Delivered To Neighbour',
+        'Signed On Paper',
+        'Podepsáno (papír)',
+        'Signature After Delivery',
+        'Vyzvednutí příjemcem',
+        'ParcelShop pickup',
+        'Parcelshop pickup',
+        'Vyzvednutí v ParcelShopu',
+        'Vyzvednuto v ParcelShopu',
+    ];
+
+    private const COLLECTED_STICKY_OVERRIDE_STATUSES = [
+        'Připravena k vyzvednutí',
+        'V přepravě',
+        'Doručována',
+        'Přijata k přepravě',
     ];
 
     public const URL = 'https://api.mygls.cz/ParcelService.svc/json/';
@@ -422,7 +465,8 @@ class Gls
                 'events'     => $events,
             ];
 
-            if ($currentStatusDescription === '' || !array_key_exists($currentStatusDescription, $statusMap)) {
+            $status = self::resolveMappedStatus($statuses, $statusMap);
+            if ($status === null) {
                 # Leave status unset so Parcel::updateStatus keeps the previous known value
                 self::notifyUnknownStatus($currentStatusDescription, $parcelNumber);
                 $response->setData($statusObject);
@@ -430,7 +474,15 @@ class Gls
                 return $response;
             }
 
-            $status = $statusMap[$currentStatusDescription];
+            # A later shop-storage scan must not hide an earlier ParcelShop collection (code 59).
+            if (
+                !$isReversePickup
+                && self::statusesContainConsigneeCollection($statuses)
+                && !self::statusesContainReturn($statuses)
+                && in_array($status, self::COLLECTED_STICKY_OVERRIDE_STATUSES, true)
+            ) {
+                $status = 'Doručena';
+            }
 
             # Sticky return: only for reverse-forward parcels with ambiguous depot/"delivered" scans.
             # Skip reverse-pickup (P&S/P&R) — history always looks like a return.
@@ -459,6 +511,50 @@ class Gls
 
     /**
      * @param \Illuminate\Support\Collection<int, object> $statuses
+     * @param array<string, string> $statusMap
+     */
+    private static function resolveMappedStatus($statuses, array $statusMap): ?string
+    {
+        $current = $statuses[0] ?? null;
+        $description = (string)($current?->StatusDescription ?? '');
+        $code = self::normalizeStatusCode($current?->StatusCode ?? '');
+
+        $fromDescription = ($description !== '' && array_key_exists($description, $statusMap))
+            ? $statusMap[$description]
+            : null;
+        $fromCode = ($code !== '' && array_key_exists($code, self::STATUS_CODE_MAP))
+            ? self::STATUS_CODE_MAP[$code]
+            : null;
+
+        # Code 59 (ParcelShop pickup) beats a leftover "Uskladněno v ParcelShopu" label.
+        if ($fromCode === 'Doručena') {
+            return 'Doručena';
+        }
+
+        return $fromDescription ?? $fromCode;
+    }
+
+    public static function normalizeStatusCode(mixed $code): string
+    {
+        return ltrim((string)$code, '0');
+    }
+
+    /**
+     * @param \Illuminate\Support\Collection<int, object> $statuses
+     */
+    private static function statusesContainConsigneeCollection($statuses): bool
+    {
+        return $statuses->contains(function ($status): bool {
+            $description = (string)($status->StatusDescription ?? '');
+            $code = self::normalizeStatusCode($status->StatusCode ?? '');
+
+            return in_array($code, self::COLLECTED_STATUS_CODES, true)
+                || in_array($description, self::COLLECTED_STATUS_DESCRIPTIONS, true);
+        });
+    }
+
+    /**
+     * @param \Illuminate\Support\Collection<int, object> $statuses
      */
     private static function statusesContainReturn($statuses): bool
     {
@@ -472,7 +568,7 @@ class Gls
     }
 
     /**
-     * Log + Slack (once per day per code) when GLS returns an unmapped status.
+     * Log every miss. Host app may digest via UnmappedCarrierStatusRecorder.
      */
     protected static function notifyUnknownStatus(string $statusDescription, int|string $parcelNumber): void
     {
@@ -481,22 +577,7 @@ class Gls
             'parcelNumber' => $parcelNumber,
         ]);
 
-        $cacheKey = 'gls-unknown-status:' . ($statusDescription !== '' ? $statusDescription : 'empty');
-        if (!Cache::add($cacheKey, true, now()->addDay())) {
-            return;
-        }
-
-        try {
-            User::find(1)?->sendSlackMessage(
-                "⚠️ GLS: neznámý stav zásilky `{$statusDescription}` (parcel {$parcelNumber})."
-                . ' Doplň mapování v Gls::STATUS_MAP.'
-            );
-        } catch (\Throwable $e) {
-            Log::warning('Failed to send GLS unknown status Slack notification', [
-                'error'  => $e->getMessage(),
-                'status' => $statusDescription,
-            ]);
-        }
+        UnmappedCarrierStatusRecorder::record('GLS', $statusDescription, $parcelNumber);
     }
 
     public static function getCostFor(ParcelableContract $parcelable): float
