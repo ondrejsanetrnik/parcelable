@@ -501,7 +501,8 @@ class Dpd
         $cashOnDelivery = [
             'amountCents' => $amountCents,
             'currency'    => $currency,
-            'payment'     => 'Cash',
+            # GeoAPI PaymentType: Cash is retired 2027-02-01; recipient picks cash or card at handover.
+            'payment'     => 'CashOrCard',
         ];
 
         # Payout VS. Alza keeps the parcel number — their pairing reads the reference fields.
