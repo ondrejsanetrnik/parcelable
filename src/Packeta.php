@@ -3,9 +3,7 @@
 namespace Ondrejsanetrnik\Parcelable;
 
 use App\Models\Entity;
-use App\Models\User;
 use Exception;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Ondrejsanetrnik\Core\CoreResponse;
@@ -150,7 +148,7 @@ class Packeta
     }
 
     /**
-     * Log + Slack (once per day per code) when Packeta returns an unmapped status.
+     * Log every miss. Host app may digest via UnmappedCarrierStatusRecorder.
      * Status is left unset so Parcel::updateStatus keeps the previous known value.
      */
     protected static function notifyUnknownStatus(string $codeText, int|string $parcelNumber): void
@@ -160,22 +158,7 @@ class Packeta
             'parcelNumber' => $parcelNumber,
         ]);
 
-        $cacheKey = 'packeta-unknown-status:' . ($codeText !== '' ? $codeText : 'empty');
-        if (!Cache::add($cacheKey, true, now()->addDay())) {
-            return;
-        }
-
-        try {
-            User::find(1)?->sendSlackMessage(
-                "⚠️ Packeta: neznámý stav zásilky `{$codeText}` (parcel {$parcelNumber})."
-                . ' Doplň mapování v Packeta::STATUS_MAP.'
-            );
-        } catch (\Throwable $e) {
-            Log::warning('Failed to send Packeta unknown status Slack notification', [
-                'error' => $e->getMessage(),
-                'code'  => $codeText,
-            ]);
-        }
+        UnmappedCarrierStatusRecorder::record('Packeta', $codeText, $parcelNumber);
     }
 
     /**
