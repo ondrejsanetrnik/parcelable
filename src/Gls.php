@@ -99,6 +99,7 @@ class Gls
         'adresát nezastižen - oznámení'    => 'Doručována',
         'Příjemce nezastižen'              => 'Doručována',
         'Nedostatek peněz'                 => 'Doručována',
+        'Doručení odloženo'                => 'Doručována',
         'ParcelLocker deposit'             => 'Připravena k vyzvednutí',
         'Doručení do ParcelShopu'          => 'Připravena k vyzvednutí',
         'Uskladněno v ParcelShopu'         => 'Připravena k vyzvednutí',
