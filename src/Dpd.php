@@ -58,9 +58,18 @@ class Dpd
         'Delivered to pickup point'                           => 'Připravena k vyzvednutí',
         'Locker ready to pickup'                              => 'Připravena k vyzvednutí',
         'Parcel picked up by delivery driver'                 => 'Doručována',
+        'Ready for delivery'                                  => 'Doručována',
+        'Parcel delivery attempt failed'                      => 'Doručována',
+        # Failed attempt — parcel is back at depot for another try, not a return to sender.
+        'Parcel is returned to delivery depot by driver'      => 'Doručována',
         'Parcel has been given additional information'        => 'V přepravě',
         'Accepted on delivery Depot'                          => 'V přepravě',
         'Parcel is scanned on hub'                            => 'V přepravě',
+        'Parcel is at the warehouse waiting for delivery'     => 'V přepravě',
+        'Parcel was not dispatched'                           => 'V přepravě',
+        'Inbound Anomaly/Incident'                            => 'V přepravě',
+        # Ambiguous: may forward to another depot OR return — sticky return covers real returns.
+        'Parcel arrived to wrong depot, it is forwarded to another depot or returned to sender' => 'V přepravě',
         'Parcel accepted on dispatch depot from driver'       => 'Přijata k přepravě',
         'Parcel accepted on dispatch depot'                   => 'Přijata k přepravě',
         'Driver picked up parcel from sender'                 => 'Přijata k přepravě',
