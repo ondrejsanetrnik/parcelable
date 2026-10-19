@@ -1,6 +1,10 @@
 <?php
 
 return [
+    # Middleware for the label / parcel index / remove routes. Labels carry recipient
+    # addresses – keep at least 'auth'; apps with customer accounts should restrict to admins.
+    'route_middleware' => ['web', 'auth'],
+
     'PACKETA_API_PASSWORD' => env('PACKETA_API_PASSWORD'),
     'PACKETA_LABEL_FORMAT' => 'A6 on A6',
 

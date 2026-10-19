@@ -11,15 +11,18 @@ use Ondrejsanetrnik\Parcelable\ParcelStoredUntil;
 class UpdateBaselinkerParcelStatuses
 {
     /**
-     * Gets all Allegro parcels on the way and updates the statuses in bulk through the Baselinker API
+     * Bulk-updates on-the-way Allegro One and Allegro-marketplace DPD parcels via Baselinker.
      *
      * @return void
      */
     public function __invoke(): void
     {
+        # Allegro One and Allegro-marketplace DPD (DpdAllegro) store a Baselinker package id
+        # in external_id. Own-contract CZ/Alza DPD have none and are tracked via GeoAPI.
         Parcel::query()
             ->whereIn('carrier', ['Allegro One', 'DPD'])
             ->whereIn('status', Parcel::ON_THE_WAY_STATUSES)
+            ->where('external_id', '>', 0)
             ->chunk(100, function ($parcels) {
                 sleep(3);
                 $packageIds = $parcels
@@ -42,6 +45,7 @@ class UpdateBaselinkerParcelStatuses
                         if ($parcelHistory) {
                             $history = is_array($parcelHistory) ? $parcelHistory : [];
                             $last = end($history) ?: [];
+                            # Baselinker tracking_status is courier-agnostic (Allegro One and DPD).
                             $status = AllegroOne::STATUSES[$last['tracking_status'] ?? null] ?? 'V přepravě';
                             $attributes = [
                                 'status'     => $status,
