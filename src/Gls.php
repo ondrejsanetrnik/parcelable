@@ -3,6 +3,8 @@
 namespace Ondrejsanetrnik\Parcelable;
 
 use App\Models\Entity;
+use App\Models\User;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Ondrejsanetrnik\Core\CoreResponse;
@@ -568,7 +570,7 @@ class Gls
     }
 
     /**
-     * Log every miss. Host app may digest via UnmappedCarrierStatusRecorder.
+     * Log + Slack (once per day per code) when GLS returns an unmapped status.
      */
     protected static function notifyUnknownStatus(string $statusDescription, int|string $parcelNumber): void
     {
@@ -577,7 +579,22 @@ class Gls
             'parcelNumber' => $parcelNumber,
         ]);
 
-        UnmappedCarrierStatusRecorder::record('GLS', $statusDescription, $parcelNumber);
+        $cacheKey = 'gls-unknown-status:' . ($statusDescription !== '' ? $statusDescription : 'empty');
+        if (!Cache::add($cacheKey, true, now()->addDay())) {
+            return;
+        }
+
+        try {
+            User::find(1)?->sendSlackMessage(
+                "⚠️ GLS: neznámý stav zásilky `{$statusDescription}` (parcel {$parcelNumber})."
+                . ' Doplň mapování v Gls::STATUS_MAP.'
+            );
+        } catch (\Throwable $e) {
+            Log::warning('Failed to send GLS unknown status Slack notification', [
+                'error'  => $e->getMessage(),
+                'status' => $statusDescription,
+            ]);
+        }
     }
 
     public static function getCostFor(ParcelableContract $parcelable): float
