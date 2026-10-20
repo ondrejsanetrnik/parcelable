@@ -1,0 +1,325 @@
+# Automated PR review via Claude Code + optional read-only production Inspector MCP.
+# Same Review + Auto Merge loop as gramodesky (ondrejsanetrnik/gramodesky), adapted for a repo
+# without self-hosted runners and with Inspector optional.
+# Review contract (what to flag, how to verify): .github/claude-review-prompt.md
+# Secrets: CLAUDE_CODE_OAUTH_TOKEN (from `claude setup-token` — must be valid, no newlines)
+#          CURSOR_API_KEY (Cursor Cloud Agents — needed to auto-fix + merge Auto Merge PRs)
+#          AUTO_MERGE_PUSH_TOKEN (optional PAT/App token, contents:write — lets Auto Merge push
+#          applied ```suggestion``` blocks so the review re-runs; without it suggestions go to
+#          the Cloud Agent. If it is a GitHub App, add its `<app>[bot]` login to allowed_bots.)
+#          MCP_INSPECTOR_TOKEN (optional — prod Bearer for Inspector; without it the review runs
+#          on code only)
+# Vars:    AUTO_MERGE_REQUIRED_CHECKS (comma list of check names that must be green to merge)
+# Model:   default `opus`; repo variable CLAUDE_REVIEW_MODEL overrides the default;
+#          PR label "Review: Fable" / "Review: Opus" overrides per PR (adding the label re-runs review).
+# Install Claude GitHub App: https://github.com/apps/claude
+# Auto Merge: PRs labeled "Auto Merge" are squash-merged when this review is clean AND every
+# other check run on the head is green (no branch protection on this plan — the script is the
+# gate) AND no human review is "Request changes".
+# The label is read from the PR after the review, not from the triggering event. `gh pr create
+# --label` adds the label a moment after `opened`, and concurrency can keep that stale run.
+# Findings with a GitHub ```suggestion``` block are applied in Actions (commit + push);
+# only findings without a suggestion start a Cursor Cloud Agent (max 3 agent loops,
+# max 5 automated pushes total).
+# allowed_bots: cursor — Cloud Agent pushes re-trigger review; without this the action
+# rejects actor cursor[bot] and the fix loop dead-ends ("review workflow nedoběhl").
+# No self-hosted runner is registered for this repo, so every job runs GitHub-hosted.
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened, labeled]
+
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  run-review:
+    name: Run review
+    if: >
+      github.event.pull_request.draft == false &&
+      (github.event.action != 'labeled'
+        || github.event.label.name == 'Auto Merge'
+        || startsWith(github.event.label.name, 'Review: '))
+    outputs:
+      auto_merge: ${{ steps.auto_merge_label.outputs.labeled }}
+    runs-on: ubuntu-latest
+    # Fable is slower than Opus.
+    timeout-minutes: 45
+    # Write needed: custom prompt posts via `gh pr comment` + inline-comment MCP.
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # Claude Code CLI (Bun) fails HTTP MCP with ConnectionRefused even when curl works.
+      # Bridge Inspector over stdio via mcp-remote (Node).
+      - name: Probe Inspector + build Claude args
+        id: claude_args
+        env:
+          MCP_INSPECTOR_TOKEN: ${{ secrets.MCP_INSPECTOR_TOKEN }}
+          PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          REVIEW_MODEL_DEFAULT: ${{ vars.CLAUDE_REVIEW_MODEL }}
+        run: |
+          set -euo pipefail
+          token="$(printf '%s' "${MCP_INSPECTOR_TOKEN:-}" | tr -d '\r\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+
+          if [ -n "$token" ]; then
+            code="$(curl -4 -sS -o /tmp/inspector-probe.body -w '%{http_code}' --max-time 20 \
+              -X POST 'https://www.gramodesky.cz/mcp/inspector' \
+              -H "Authorization: Bearer ${token}" \
+              -H 'Content-Type: application/json' \
+              -H 'Accept: application/json, text/event-stream' \
+              -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci-probe","version":"0"}}}')"
+            echo "Inspector probe HTTP ${code}"
+            case "$code" in
+              200|202) ;;
+              *)
+                echo "Inspector configured but unusable (HTTP ${code}). Check MCP_INSPECTOR_TOKEN / network." >&2
+                exit 1
+                ;;
+            esac
+            # Warm the mcp-remote package so Claude's first stdio spawn is faster/more reliable.
+            npx -y mcp-remote@0.13.5 --help >/dev/null
+          else
+            echo "MCP_INSPECTOR_TOKEN not set — reviewing code only."
+          fi
+
+          INSPECTOR_TOKEN="$token" python3 - <<'PY'
+          import json
+          import os
+          import shlex
+
+          labels = json.loads(os.environ.get("PR_LABELS") or "[]")
+          model = (os.environ.get("REVIEW_MODEL_DEFAULT") or "opus").strip()
+          if "Review: Fable" in labels:
+              model = "fable"
+          elif "Review: Opus" in labels:
+              model = "opus"
+          print(f"Review model: {model}")
+
+          token = os.environ.get("INSPECTOR_TOKEN", "")
+
+          tools = [
+              "Read", "Grep", "Glob", "Task", "TodoWrite",
+              "Bash(gh pr view:*)", "Bash(gh pr diff:*)", "Bash(gh pr comment:*)",
+              "Bash(gh pr list:*)", "Bash(gh api:*)",
+              "mcp__github_inline_comment__create_inline_comment",
+          ]
+          system = (
+              "You are a read-only CI code reviewer. Do not edit files, push commits, or mutate "
+              "production. Never invent production state; keep customer PII out of PR comments. "
+              "Summary comment = emoji lines only (✅/❌/⚠️); detail only in inline comments. "
+          )
+          extra = ""
+          if token:
+              # IMPORTANT: claude-code-action drops file-path --mcp-config when merging built-ins.
+              # Pass the JSON inline.
+              mcp = {
+                  "mcpServers": {
+                      "inspector": {
+                          "command": "npx",
+                          "args": [
+                              "-y",
+                              "mcp-remote@0.13.5",
+                              "https://www.gramodesky.cz/mcp/inspector",
+                              "--header",
+                              "Authorization:${MCP_INSPECTOR_AUTH}",
+                          ],
+                          "env": {
+                              "MCP_INSPECTOR_AUTH": f"Bearer {token}",
+                              "NODE_OPTIONS": "--dns-result-order=ipv4first",
+                          },
+                      }
+                  }
+              }
+              extra = f"--mcp-config {shlex.quote(json.dumps(mcp, separators=(',', ':')))} "
+              tools += [
+                  "mcp__inspector__list-log-channels",
+                  "mcp__inspector__read-last-error",
+                  "mcp__inspector__read-log-entries",
+                  "mcp__inspector__run-select-query",
+                  "mcp__inspector__database-schema",
+                  "mcp__inspector__get-model",
+                  "mcp__inspector__inspector-search-orders",
+                  "mcp__inspector__inspector-get-order-details",
+                  "mcp__inspector__list-storage-files",
+                  "mcp__inspector__search-storage-files",
+                  "mcp__inspector__read-storage-file",
+              ]
+              system += (
+                  "Inspector MCP (server `inspector`) is available for read-only production checks. "
+                  "If it fails mid-review, post only `❌ Verified failed (Inspector unreachable) — re-run` "
+                  "and no inline findings."
+              )
+          else:
+              system += "Inspector MCP is not configured for this run — review the code only."
+
+          args = (
+              f"--model {model} "
+              f"--max-turns 80 "
+              f"{extra}"
+              f"--allowedTools {shlex.quote(','.join(tools))} "
+              f"--append-system-prompt {shlex.quote(system)}"
+          )
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              out.write("value<<CLAUDE_ARGS_EOF\n")
+              out.write(args + "\n")
+              out.write("CLAUDE_ARGS_EOF\n")
+          PY
+
+      - uses: anthropics/claude-code-action@v1
+        id: claude
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            Review pull request ${{ github.repository }}#${{ github.event.pull_request.number }}
+            (head SHA ${{ github.event.pull_request.head.sha }}).
+            Read `.github/claude-review-prompt.md` in the checked-out repository and follow it exactly:
+            post findings as inline comments and finish with the summary comment it specifies.
+          show_full_output: "true"
+          # Cursor Cloud Agent commits must re-run this review for the Auto Merge fix loop.
+          allowed_bots: cursor
+          claude_args: ${{ steps.claude_args.outputs.value }}
+
+      # Do not let Auto Merge treat a skipped production check as a clean review.
+      - name: Fail if Inspector verification failed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          body="$(gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+            --jq '[.[] | select(.user.login | test("claude"; "i"))] | last | .body // empty')"
+          if printf '%s' "$body" | grep -qiE 'Inspector unreachable|Verified failed'; then
+            echo "Claude reported Inspector verification failure — failing the job." >&2
+            printf '%s\n' "$body" | head -c 500 >&2
+            exit 1
+          fi
+          echo "No Inspector-failure summary on latest Claude comment."
+
+      # Event payload labels are stale when this run was the `opened` delivery and the
+      # Auto Merge label arrived on a cancelled sibling run. Decide from the PR now.
+      - name: Note whether Auto Merge is labeled
+        id: auto_merge_label
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          labeled="$(gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}" --jq 'any(.labels[]?; .name == "Auto Merge")')"
+          echo "labeled=${labeled}" >> "$GITHUB_OUTPUT"
+          echo "Auto Merge label on PR now: ${labeled}"
+
+  # GitHub Actions job checks cannot be patched to neutral via API (403 since 2025-03).
+  # Publish a separate check run — Bugbot-style: success = clean, neutral = findings.
+  claude-code-review:
+    name: Claude Code Review
+    needs: run-review
+    if: always() && needs.run-review.result != 'cancelled' && needs.run-review.result != 'skipped'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Publish review check
+        uses: actions/github-script@v7
+        env:
+          REVIEW_RESULT: ${{ needs.run-review.result }}
+        with:
+          script: |
+            const { collectFindings } = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/pr-auto-merge.js`);
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const sha = context.payload.pull_request.head.sha;
+            const claudeOk = process.env.REVIEW_RESULT === 'success';
+            const claudeFindings = claudeOk
+              ? await collectFindings({ github, context })
+              : [];
+
+            let conclusion = 'success';
+            let title = 'No issues found';
+            let summary = 'Claude Code Review found no issues on this pull request.';
+
+            if (!claudeOk) {
+              conclusion = 'neutral';
+              title = 'Review encountered an error';
+              summary = 'Claude Code Review did not complete successfully. See workflow logs.';
+            } else if (claudeFindings.length > 0) {
+              conclusion = 'neutral';
+              title = `${claudeFindings.length} issue(s) found`;
+              summary = [
+                'Claude Code Review reported issues — resolve inline comments before merge.',
+                '',
+                ...claudeFindings.map((finding) => {
+                  const headline = (finding.body ?? '').split('\n')[0].slice(0, 200);
+                  return `- \`${finding.path}:${finding.line}\` — ${headline}`;
+                }),
+              ].join('\n');
+            }
+
+            await github.rest.checks.create({
+              owner,
+              repo,
+              name: 'Claude Code Review',
+              head_sha: sha,
+              status: 'completed',
+              conclusion,
+              details_url: `${process.env.GITHUB_SERVER_URL}/${owner}/${repo}/actions/runs/${context.runId}`,
+              output: { title, summary },
+            });
+
+  auto-merge:
+    name: Auto Merge
+    needs: [run-review, claude-code-review]
+    if: >
+      always()
+      && needs.run-review.result != 'cancelled'
+      && needs.run-review.result != 'skipped'
+      && needs.run-review.outputs.auto_merge == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      checks: read
+      actions: write
+    steps:
+      # Exact reviewed head (not the branch tip) so applied ```suggestion``` blocks land on the
+      # lines Claude commented on; push is `HEAD:refs/heads/<branch>` → rejected if the branch
+      # moved meanwhile (non-fast-forward) instead of silently overwriting someone's push.
+      # AUTO_MERGE_PUSH_TOKEN (PAT / GitHub App, contents:write) is required for the push to
+      # re-trigger this workflow — GITHUB_TOKEN pushes never fire `pull_request: synchronize`.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          token: ${{ secrets.AUTO_MERGE_PUSH_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Merge, apply suggestions, or start Cloud Agent
+        uses: actions/github-script@v7
+        env:
+          REVIEW_RESULT: ${{ needs.run-review.result }}
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          MCP_INSPECTOR_TOKEN: ${{ secrets.MCP_INSPECTOR_TOKEN }}
+          AUTO_MERGE_PUSH_TOKEN: ${{ secrets.AUTO_MERGE_PUSH_TOKEN }}
+          AUTO_MERGE_REQUIRED_CHECKS: ${{ vars.AUTO_MERGE_REQUIRED_CHECKS }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        with:
+          script: |
+            const prAutoMerge = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/pr-auto-merge.js`);
+            await prAutoMerge({ github, context, core });
