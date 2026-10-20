@@ -1,14 +1,11 @@
-# Automated PR review via Claude Code + optional read-only production Inspector MCP.
-# Same Review + Auto Merge loop as gramodesky (ondrejsanetrnik/gramodesky), adapted for a repo
-# without self-hosted runners and with Inspector optional.
-# Review contract (what to flag, how to verify): .github/claude-review-prompt.md
+# Automated PR review via Claude Code. Same Review + Auto Merge loop as gramodesky
+# (ondrejsanetrnik/gramodesky), without the production Inspector and without self-hosted runners.
+# Review contract (what to flag): .github/claude-review-prompt.md
 # Secrets: CLAUDE_CODE_OAUTH_TOKEN (from `claude setup-token` — must be valid, no newlines)
 #          CURSOR_API_KEY (Cursor Cloud Agents — needed to auto-fix + merge Auto Merge PRs)
 #          AUTO_MERGE_PUSH_TOKEN (optional PAT/App token, contents:write — lets Auto Merge push
 #          applied ```suggestion``` blocks so the review re-runs; without it suggestions go to
 #          the Cloud Agent. If it is a GitHub App, add its `<app>[bot]` login to allowed_bots.)
-#          MCP_INSPECTOR_TOKEN (optional — prod Bearer for Inspector; without it the review runs
-#          on code only)
 # Vars:    AUTO_MERGE_REQUIRED_CHECKS (comma list of check names that must be green to merge)
 # Model:   default `opus`; repo variable CLAUDE_REVIEW_MODEL overrides the default;
 #          PR label "Review: Fable" / "Review: Opus" overrides per PR (adding the label re-runs review).
@@ -58,40 +55,13 @@ jobs:
         with:
           fetch-depth: 1
 
-      # Claude Code CLI (Bun) fails HTTP MCP with ConnectionRefused even when curl works.
-      # Bridge Inspector over stdio via mcp-remote (Node).
-      - name: Probe Inspector + build Claude args
+      - name: Build Claude args
         id: claude_args
         env:
-          MCP_INSPECTOR_TOKEN: ${{ secrets.MCP_INSPECTOR_TOKEN }}
           PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
           REVIEW_MODEL_DEFAULT: ${{ vars.CLAUDE_REVIEW_MODEL }}
         run: |
-          set -euo pipefail
-          token="$(printf '%s' "${MCP_INSPECTOR_TOKEN:-}" | tr -d '\r\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
-
-          if [ -n "$token" ]; then
-            code="$(curl -4 -sS -o /tmp/inspector-probe.body -w '%{http_code}' --max-time 20 \
-              -X POST 'https://www.gramodesky.cz/mcp/inspector' \
-              -H "Authorization: Bearer ${token}" \
-              -H 'Content-Type: application/json' \
-              -H 'Accept: application/json, text/event-stream' \
-              -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci-probe","version":"0"}}}')"
-            echo "Inspector probe HTTP ${code}"
-            case "$code" in
-              200|202) ;;
-              *)
-                echo "Inspector configured but unusable (HTTP ${code}). Check MCP_INSPECTOR_TOKEN / network." >&2
-                exit 1
-                ;;
-            esac
-            # Warm the mcp-remote package so Claude's first stdio spawn is faster/more reliable.
-            npx -y mcp-remote@0.13.5 --help >/dev/null
-          else
-            echo "MCP_INSPECTOR_TOKEN not set — reviewing code only."
-          fi
-
-          INSPECTOR_TOKEN="$token" python3 - <<'PY'
+          python3 - <<'PY'
           import json
           import os
           import shlex
@@ -104,68 +74,21 @@ jobs:
               model = "opus"
           print(f"Review model: {model}")
 
-          token = os.environ.get("INSPECTOR_TOKEN", "")
-
-          tools = [
+          tools = ",".join([
               "Read", "Grep", "Glob", "Task", "TodoWrite",
               "Bash(gh pr view:*)", "Bash(gh pr diff:*)", "Bash(gh pr comment:*)",
               "Bash(gh pr list:*)", "Bash(gh api:*)",
               "mcp__github_inline_comment__create_inline_comment",
-          ]
+          ])
           system = (
-              "You are a read-only CI code reviewer. Do not edit files, push commits, or mutate "
-              "production. Never invent production state; keep customer PII out of PR comments. "
-              "Summary comment = emoji lines only (✅/❌/⚠️); detail only in inline comments. "
+              "You are a read-only CI code reviewer. Do not edit files or push commits. "
+              "Keep customer PII out of PR comments. Summary comment = emoji lines only "
+              "(✅/❌/⚠️); detail only in inline comments."
           )
-          extra = ""
-          if token:
-              # IMPORTANT: claude-code-action drops file-path --mcp-config when merging built-ins.
-              # Pass the JSON inline.
-              mcp = {
-                  "mcpServers": {
-                      "inspector": {
-                          "command": "npx",
-                          "args": [
-                              "-y",
-                              "mcp-remote@0.13.5",
-                              "https://www.gramodesky.cz/mcp/inspector",
-                              "--header",
-                              "Authorization:${MCP_INSPECTOR_AUTH}",
-                          ],
-                          "env": {
-                              "MCP_INSPECTOR_AUTH": f"Bearer {token}",
-                              "NODE_OPTIONS": "--dns-result-order=ipv4first",
-                          },
-                      }
-                  }
-              }
-              extra = f"--mcp-config {shlex.quote(json.dumps(mcp, separators=(',', ':')))} "
-              tools += [
-                  "mcp__inspector__list-log-channels",
-                  "mcp__inspector__read-last-error",
-                  "mcp__inspector__read-log-entries",
-                  "mcp__inspector__run-select-query",
-                  "mcp__inspector__database-schema",
-                  "mcp__inspector__get-model",
-                  "mcp__inspector__inspector-search-orders",
-                  "mcp__inspector__inspector-get-order-details",
-                  "mcp__inspector__list-storage-files",
-                  "mcp__inspector__search-storage-files",
-                  "mcp__inspector__read-storage-file",
-              ]
-              system += (
-                  "Inspector MCP (server `inspector`) is available for read-only production checks. "
-                  "If it fails mid-review, post only `❌ Verified failed (Inspector unreachable) — re-run` "
-                  "and no inline findings."
-              )
-          else:
-              system += "Inspector MCP is not configured for this run — review the code only."
-
           args = (
               f"--model {model} "
               f"--max-turns 80 "
-              f"{extra}"
-              f"--allowedTools {shlex.quote(','.join(tools))} "
+              f"--allowedTools {shlex.quote(tools)} "
               f"--append-system-prompt {shlex.quote(system)}"
           )
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
@@ -187,22 +110,6 @@ jobs:
           # Cursor Cloud Agent commits must re-run this review for the Auto Merge fix loop.
           allowed_bots: cursor
           claude_args: ${{ steps.claude_args.outputs.value }}
-
-      # Do not let Auto Merge treat a skipped production check as a clean review.
-      - name: Fail if Inspector verification failed
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          set -euo pipefail
-          body="$(gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
-            --jq '[.[] | select(.user.login | test("claude"; "i"))] | last | .body // empty')"
-          if printf '%s' "$body" | grep -qiE 'Inspector unreachable|Verified failed'; then
-            echo "Claude reported Inspector verification failure — failing the job." >&2
-            printf '%s\n' "$body" | head -c 500 >&2
-            exit 1
-          fi
-          echo "No Inspector-failure summary on latest Claude comment."
 
       # Event payload labels are stale when this run was the `opened` delivery and the
       # Auto Merge label arrived on a cancelled sibling run. Decide from the PR now.
@@ -315,7 +222,6 @@ jobs:
         env:
           REVIEW_RESULT: ${{ needs.run-review.result }}
           CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
-          MCP_INSPECTOR_TOKEN: ${{ secrets.MCP_INSPECTOR_TOKEN }}
           AUTO_MERGE_PUSH_TOKEN: ${{ secrets.AUTO_MERGE_PUSH_TOKEN }}
           AUTO_MERGE_REQUIRED_CHECKS: ${{ vars.AUTO_MERGE_REQUIRED_CHECKS }}
           PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
