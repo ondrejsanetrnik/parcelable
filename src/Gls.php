@@ -159,21 +159,6 @@ class Gls
         '97' => 'Připravena k vyzvednutí',
     ];
 
-    private const COLLECTED_STATUS_CODES = ['5', '58', '59', '92', '93'];
-
-    private const COLLECTED_STATUS_DESCRIPTIONS = [
-        'Doručeno',
-        'Delivered To Neighbour',
-        'Signed On Paper',
-        'Podepsáno (papír)',
-        'Signature After Delivery',
-        'Vyzvednutí příjemcem',
-        'ParcelShop pickup',
-        'Parcelshop pickup',
-        'Vyzvednutí v ParcelShopu',
-        'Vyzvednuto v ParcelShopu',
-    ];
-
     private const COLLECTED_STICKY_OVERRIDE_STATUSES = [
         'Připravena k vyzvednutí',
         'V přepravě',
@@ -549,8 +534,8 @@ class Gls
             $description = (string)($status->StatusDescription ?? '');
             $code = self::normalizeStatusCode($status->StatusCode ?? '');
 
-            return in_array($code, self::COLLECTED_STATUS_CODES, true)
-                || in_array($description, self::COLLECTED_STATUS_DESCRIPTIONS, true);
+            return (self::STATUS_CODE_MAP[$code] ?? null) === 'Doručena'
+                || (self::STATUS_MAP[$description] ?? null) === 'Doručena';
         });
     }
 
