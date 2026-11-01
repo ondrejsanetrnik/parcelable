@@ -16,6 +16,10 @@ class Gls
         'Podepsáno (papír)'                => 'Doručena',
         'Signature After Delivery'         => 'Doručena',
         'Vyzvednutí příjemcem'             => 'Doručena',
+        'ParcelShop pickup'                => 'Doručena',
+        'Parcelshop pickup'                => 'Doručena',
+        'Vyzvednutí v ParcelShopu'         => 'Doručena',
+        'Vyzvednuto v ParcelShopu'         => 'Doručena',
         'Vráceno odesílateli'              => 'Vrácena obchodu',
         'returned'                         => 'Vrácena obchodu',
         'Ostatní data přijata'             => 'Čeká na vyzvednutí kurýrem',
@@ -139,6 +143,27 @@ class Gls
         'Přijata k přepravě',
         'Čeká na vyzvednutí kurýrem',
         'Doručena',
+    ];
+
+    # MyGLS Appendix G. Code 59 = customer collected at ParcelShop.
+    public const STATUS_CODE_MAP = [
+        '5'  => 'Doručena',
+        '58' => 'Doručena',
+        '59' => 'Doručena',
+        '92' => 'Doručena',
+        '93' => 'Doručena',
+        '54' => 'Připravena k vyzvednutí',
+        '55' => 'Připravena k vyzvednutí',
+        '56' => 'Připravena k vyzvednutí',
+        '57' => 'Připravena k vyzvednutí',
+        '97' => 'Připravena k vyzvednutí',
+    ];
+
+    private const COLLECTED_STICKY_OVERRIDE_STATUSES = [
+        'Připravena k vyzvednutí',
+        'V přepravě',
+        'Doručována',
+        'Přijata k přepravě',
     ];
 
     public const URL = 'https://api.mygls.cz/ParcelService.svc/json/';
@@ -426,7 +451,8 @@ class Gls
                 'events'     => $events,
             ];
 
-            if ($currentStatusDescription === '' || !array_key_exists($currentStatusDescription, $statusMap)) {
+            $status = self::resolveMappedStatus($statuses, $statusMap);
+            if ($status === null) {
                 # Leave status unset so Parcel::updateStatus keeps the previous known value
                 self::notifyUnknownStatus($currentStatusDescription, $parcelNumber);
                 $response->setData($statusObject);
@@ -434,7 +460,15 @@ class Gls
                 return $response;
             }
 
-            $status = $statusMap[$currentStatusDescription];
+            # A later shop-storage scan must not hide an earlier ParcelShop collection (code 59).
+            if (
+                !$isReversePickup
+                && self::statusesContainConsigneeCollection($statuses)
+                && !self::statusesContainReturn($statuses)
+                && in_array($status, self::COLLECTED_STICKY_OVERRIDE_STATUSES, true)
+            ) {
+                $status = 'Doručena';
+            }
 
             # Sticky return: only for reverse-forward parcels with ambiguous depot/"delivered" scans.
             # Skip reverse-pickup (P&S/P&R) — history always looks like a return.
@@ -459,6 +493,50 @@ class Gls
         }
 
         return $response;
+    }
+
+    /**
+     * @param \Illuminate\Support\Collection<int, object> $statuses
+     * @param array<string, string> $statusMap
+     */
+    private static function resolveMappedStatus($statuses, array $statusMap): ?string
+    {
+        $current = $statuses[0] ?? null;
+        $description = (string)($current?->StatusDescription ?? '');
+        $code = self::normalizeStatusCode($current?->StatusCode ?? '');
+
+        $fromDescription = ($description !== '' && array_key_exists($description, $statusMap))
+            ? $statusMap[$description]
+            : null;
+        $fromCode = ($code !== '' && array_key_exists($code, self::STATUS_CODE_MAP))
+            ? self::STATUS_CODE_MAP[$code]
+            : null;
+
+        # Code 59 (ParcelShop pickup) beats a leftover "Uskladněno v ParcelShopu" label.
+        if ($fromCode === 'Doručena') {
+            return 'Doručena';
+        }
+
+        return $fromDescription ?? $fromCode;
+    }
+
+    public static function normalizeStatusCode(mixed $code): string
+    {
+        return ltrim((string)$code, '0');
+    }
+
+    /**
+     * @param \Illuminate\Support\Collection<int, object> $statuses
+     */
+    private static function statusesContainConsigneeCollection($statuses): bool
+    {
+        return $statuses->contains(function ($status): bool {
+            $description = (string)($status->StatusDescription ?? '');
+            $code = self::normalizeStatusCode($status->StatusCode ?? '');
+
+            return (self::STATUS_CODE_MAP[$code] ?? null) === 'Doručena'
+                || (self::STATUS_MAP[$description] ?? null) === 'Doručena';
+        });
     }
 
     /**
