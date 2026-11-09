@@ -55,6 +55,9 @@ class Dpd
         'Delivered'                                           => 'Doručena',
         'Parcel was picked up by consignee from Pickup point' => 'Doručena',
         'Parcel was picked up by recipient'                   => 'Doručena',
+        # Pickup point handed the parcel to the consignee without a scan.
+        'Issued without scan - with COD'                      => 'Doručena',
+        'Issued without scan - without COD'                   => 'Doručena',
         'Delivered to pickup point'                           => 'Připravena k vyzvednutí',
         'Locker ready to pickup'                              => 'Připravena k vyzvednutí',
         'Parcel picked up by delivery driver'                 => 'Doručována',
@@ -66,6 +69,7 @@ class Dpd
         'Accepted on delivery Depot'                          => 'V přepravě',
         'Parcel is scanned on hub'                            => 'V přepravě',
         'Parcel is at the warehouse waiting for delivery'     => 'V přepravě',
+        'Parcel is between dispatch and delivery depot'       => 'V přepravě',
         'Parcel was not dispatched'                           => 'V přepravě',
         'Inbound Anomaly/Incident'                            => 'V přepravě',
         # Ambiguous: may forward to another depot OR return — sticky return covers real returns.
@@ -88,11 +92,21 @@ class Dpd
     ];
 
     # GeoAPI noise — skip when choosing current status so code 18 cannot hide pickup.
+    # Pickup point codes 71 and 81–96 come also after delivery or return. If mapped, they move a delivered parcel back to "V přepravě".
     private const INFORMATIONAL_STATUS_DESCRIPTIONS = [
         'Parcel has been given additional information',
         'Shipment expiration is updated',
         'N/A',
         'Unknown parcel status. Please contact our support',
+        'Parcel was dispatched',
+        'Parcel was not stocked - with COD',
+        'Parcel was not stocked - without COD',
+        'Parcel was damaged - with COD',
+        'Parcel was damaged - without COD',
+        'Expired storage time - with COD',
+        'Expired storage time - without COD',
+        'End of exception - with COD',
+        'End of exception - without COD',
     ];
 
     # Match by description only — DPD reuses numeric codes (e.g. 6 vs 06) for unrelated events.
@@ -114,6 +128,8 @@ class Dpd
     private const PICKED_UP_BY_CONSIGNEE_DESCRIPTIONS = [
         'Parcel was picked up by consignee from Pickup point',
         'Parcel was picked up by recipient',
+        'Issued without scan - with COD',
+        'Issued without scan - without COD',
     ];
 
     private const AMBIGUOUS_DELIVERED_DESCRIPTIONS = [
@@ -810,7 +826,8 @@ class Dpd
 
     private static function normalizeEventDescription(?string $description): string
     {
-        return rtrim(trim((string)$description), '.');
+        # GeoAPI sometimes sends double spaces ("Issued without scan  - without COD").
+        return rtrim(trim(preg_replace('/\s+/', ' ', (string)$description)), '.');
     }
 
     /**
