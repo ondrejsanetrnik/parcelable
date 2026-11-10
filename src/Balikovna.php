@@ -10,6 +10,9 @@ use Ondrejsanetrnik\Core\CoreResponse;
 
 class Balikovna
 {
+    /** Nejvyšší hodnota obsahu zásilky Balíkovna (podmínky České pošty 2026, Plus 100 000 Kč). */
+    public const MAX_INSURED_VALUE = 50000;
+
     public const STATUS_MAP = [
         'Obdrženy údaje k zásilce.'    => 'Čeká na vyzvednutí kurýrem',
         'převzata do přepravy.'        => 'Přijata k přepravě',
@@ -468,6 +471,25 @@ class Balikovna
         }
     }
 
+    /**
+     * Pojistná hodnota jednoho balíku: dvojnásobek ceny zboží, nejvýš limit Balíkovny.
+     *
+     * Bez stropu API vrací INVALID_PRICE (objednávka 490146, 43 006 Kč → 86 012 Kč, 10. 11. 2026).
+     * U výdejních míst se každý balík podává zvlášť a limit platí na balík, proto se cena dělí
+     * počtem balíků. Na adresu jde víc balíků v jednom požadavku a pojistnou hodnotu nese jen
+     * první, tam se nedělí.
+     */
+    protected static function insuredValue(Entity $entity): float|int
+    {
+        $total = $entity->total;
+
+        if (!$entity->is_balikovna_on_address) {
+            $total /= max((int)$entity->parcel_count, 1);
+        }
+
+        return min($total * 2, static::MAX_INSURED_VALUE);
+    }
+
     public static function generateJson(Entity $entity, ?int $formID = null, int $position = 1): string
     {
         $config = static::getConfig();
@@ -488,7 +510,7 @@ class Balikovna
                 : strval(round(min($entity->width / 50, 14), 3)), // Max limit 14 otherwise
             'prefixParcelCode' => $entity->is_balikovna_on_address == 1 ? 'DR' : 'NB', // Prefix for parcel code
             'recordID'         => strval($entity->id), // internal ID
-            'insuredValue'     => $entity->total * 2, // insurance, double the price of goods
+            'insuredValue'     => static::insuredValue($entity), // insurance, double the price of goods
             'note'             => $entity->note ?? '', // internal note for the parcel
             'notePrint'        => '' . $entity->id ?? '', // for the label
         ];
