@@ -162,7 +162,7 @@ class Dpd
         }
 
         try {
-            $payload = [self::buildShipmentPayload($entity)];
+            $payload = self::splitForPickupPoint(self::buildShipmentPayload($entity), $entity);
         } catch (\RuntimeException $e) {
             return $coreResponse->fail($e->getMessage());
         }
@@ -174,14 +174,14 @@ class Dpd
         }
 
         $data = $response->json();
-        if (!is_array($data) || !isset($data[0]['parcels'][0])) {
+        if (!is_array($data) || count($data) !== count($payload) || !isset($data[0]['parcels'][0])) {
             return $coreResponse->fail('Neočekávaná odpověď DPD při vytváření zásilky.');
         }
 
-        $shipment = $data[0];
         $protoParcels = [];
 
-        foreach ($shipment['parcels'] as $parcel) {
+        // Víc zásilek v odpovědi je jen u výdejního místa rozděleného na jednobalíkové zásilky.
+        foreach (array_merge(...array_map(fn($shipment) => $shipment['parcels'] ?? [], $data)) as $parcel) {
             $mainNr = $parcel['parcelNumbers']['main'] ?? null;
             if (!$mainNr) {
                 return $coreResponse->fail('DPD nevrátilo číslo zásilky (parcelNumbers.main).');
@@ -218,6 +218,41 @@ class Dpd
         }
 
         return $coreResponse->success($protoParcels);
+    }
+
+    /**
+     * Výdejní místo (služba D-B2C-PSD) neumí víc balíků v jedné zásilce, GeoAPI vrací
+     * MpsDisallowedError (objednávka 492894, 3 balíky, 10. 11. 2026). Proto se pošle jedna
+     * zásilka na balík, všechny na stejné výdejní místo, a zákazník dostane avízo ke každému.
+     * Dobírka se rozpočítá na zásilky, jinak by ji zaplatil třikrát.
+     *
+     * @param array<string, mixed> $payload
+     * @return array<int, array<string, mixed>>
+     */
+    private static function splitForPickupPoint(array $payload, Entity $entity): array
+    {
+        $parcels = $payload['parcels'];
+        $isPickup = !CarrierClassResolver::isAlzaSource($entity) && self::defaultPickupPoint($entity) !== '';
+
+        if (!$isPickup || count($parcels) < 2) {
+            return [$payload];
+        }
+
+        $shipments = [];
+        foreach ($parcels as $parcel) {
+            $shipment = $payload;
+            $shipment['parcels'] = [$parcel];
+
+            if (isset($shipment['services']['cashOnDelivery']['amountCents'])) {
+                $shipment['services']['cashOnDelivery']['amountCents'] = (int)round(
+                    $shipment['services']['cashOnDelivery']['amountCents'] / count($parcels)
+                );
+            }
+
+            $shipments[] = $shipment;
+        }
+
+        return $shipments;
     }
 
     private static function buildShipmentPayload(Entity $entity): array
